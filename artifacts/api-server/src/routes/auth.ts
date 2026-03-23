@@ -150,13 +150,20 @@ a{color:#4285f4}</style></head>
     }
 
     // Upsert a local teacher user
-    const dbUser = await upsertUser({
-      sub: "local-teacher",
-      email: `${username}@localhost.dev`,
-      given_name: "Local",
-      family_name: "Teacher",
-      picture: null,
-    });
+    let dbUser;
+    try {
+      dbUser = await upsertUser({
+        sub: "local-teacher",
+        email: `${username}@localhost.dev`,
+        given_name: "Local",
+        family_name: "Teacher",
+        picture: null,
+      });
+    } catch (err) {
+      console.error("Local login upsert error:", err);
+      res.status(500).send("Login failed — database error");
+      return;
+    }
 
     const sessionData: SessionData = {
       user: {

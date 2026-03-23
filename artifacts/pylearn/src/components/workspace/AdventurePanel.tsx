@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@workspace/auth-web';
-import { Upload, Trash2, Image } from 'lucide-react';
+import { Upload, Trash2, Image, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import type { AdventureState } from '@/hooks/use-adventure-events';
@@ -20,9 +20,12 @@ interface UploadedImage {
 interface AdventurePanelProps {
   adventureState: AdventureState;
   overrideUserId?: string;
+  isImmersive?: boolean;
+  onToggleImmersive?: () => void;
+  onInput?: (data: string) => void;
 }
 
-export function AdventurePanel({ adventureState, overrideUserId }: AdventurePanelProps) {
+export function AdventurePanel({ adventureState, overrideUserId, isImmersive, onToggleImmersive, onInput }: AdventurePanelProps) {
   const { user } = useAuth();
   const effectiveUserId = overrideUserId || user?.id;
   const isReadOnly = !!overrideUserId;
@@ -119,122 +122,138 @@ export function AdventurePanel({ adventureState, overrideUserId }: AdventurePane
     return { background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)' };
   };
 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const immersiveInputRef = useRef<HTMLInputElement>(null);
+  const [inputValue, setInputValue] = useState('');
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [adventureState.messages]);
+
+  // Auto-focus the immersive input when a question appears
+  useEffect(() => {
+    if (isImmersive && adventureState.question) {
+      immersiveInputRef.current?.focus();
+    }
+  }, [isImmersive, adventureState.question]);
+
+  const handleImmersiveSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onInput || !inputValue) return;
+    onInput(inputValue + '\r');
+    setInputValue('');
+  }, [onInput, inputValue]);
+
   return (
-    <div className="h-full flex flex-col bg-card">
-      <div className="flex-1 relative overflow-hidden" style={getBackgroundStyle()}>
-        {!adventureState.background && Object.keys(adventureState.sprites).length === 0 && !adventureState.dialogue && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center text-white/50 space-y-3">
-              <Image className="w-16 h-16 mx-auto opacity-50" />
-              <p className="text-lg font-medium">Adventure Preview</p>
-              <p className="text-sm max-w-xs">
-                Run code with <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs">from adventure import scene, say, show</code> to see your story here.
-              </p>
-            </div>
-          </div>
-        )}
+    <div className="h-full relative overflow-hidden" style={getBackgroundStyle()}>
 
-        {adventureState.background && (
-          <div className="absolute top-3 left-3 z-10">
-            <span className="bg-black/50 backdrop-blur-sm text-white/90 text-xs font-medium px-2.5 py-1 rounded-full border border-white/20">
-              {adventureState.background}
-            </span>
-          </div>
-        )}
-
-        {Object.entries(adventureState.sprites).map(([name, pos]) => {
-          const uploadedSprite = images.find((img) => {
-            const nameWithoutExt = img.filename.replace(/\.[^.]+$/, '');
-            return nameWithoutExt === name || img.filename === name;
-          });
-
-          return (
-            <div
-              key={name}
-              className="absolute"
-              style={{ left: pos.x, top: pos.y }}
-            >
-              {uploadedSprite ? (
-                <img
-                  src={`/api/adventure/uploads/${effectiveUserId}/${uploadedSprite.filename}`}
-                  alt={name}
-                  className="max-w-[120px] max-h-[120px] object-contain drop-shadow-lg"
-                />
-              ) : (
-                <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm border border-white/30 shadow-lg">
-                  {name}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {adventureState.dialogue && (
-        <div className="px-4 py-3 bg-slate-900 border-t border-white/10">
-          <div className="text-white text-base leading-relaxed">
-            {adventureState.dialogue}
+      {/* Empty state */}
+      {!adventureState.background && Object.keys(adventureState.sprites).length === 0 && adventureState.messages.length === 0 && !adventureState.question && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center text-white/50 space-y-3">
+            <Image className="w-16 h-16 mx-auto opacity-50" />
+            <p className="text-lg font-medium">Adventure Preview</p>
+            <p className="text-sm max-w-xs">
+              Run code with <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs">from adventure import scene, say, show</code> to see your story here.
+            </p>
           </div>
         </div>
       )}
 
-      <div className="border-t border-border bg-muted/30 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {isReadOnly ? "Student Images" : "My Images"}
+      {/* Background label */}
+      {adventureState.background && (
+        <div className="absolute top-3 left-3 z-10">
+          <span className="bg-black/40 backdrop-blur-sm text-white/80 text-xs px-2.5 py-1 rounded-full border border-white/10">
+            {adventureState.background}
           </span>
-          {!isReadOnly && (
-            <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".jpg,.jpeg,.png,.gif,.webp"
-                className="hidden"
-                onChange={handleUpload}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="text-xs h-7 rounded-lg"
-              >
-                <Upload className="w-3 h-3 mr-1" />
-                {uploading ? 'Uploading...' : 'Upload'}
-              </Button>
-            </div>
-          )}
         </div>
-        {images.length === 0 ? (
-          <p className="text-xs text-muted-foreground/60 italic">
-            {isReadOnly ? "No images uploaded by this student." : "No images uploaded yet. Upload backgrounds and sprites to use in your adventure!"}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
-            {images.map((img) => (
-              <div
-                key={img.filename}
-                className="group relative flex items-center gap-1.5 bg-background rounded-md px-2 py-1 border border-border text-xs"
-              >
-                <img
-                  src={`/api/adventure/uploads/${effectiveUserId}/${img.filename}`}
-                  alt={img.filename}
-                  className="w-6 h-6 object-cover rounded"
-                />
-                <span className="truncate max-w-[80px]">{img.filename}</span>
-                {!isReadOnly && (
-                  <button
-                    onClick={() => handleDelete(img.filename)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive/80"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+      )}
+
+      {/* Top-right buttons: upload + immersive toggle */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+        {!isReadOnly && (
+          <>
+            <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.gif,.webp" className="hidden" onChange={handleUpload} />
+            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+              className="text-[10px] h-6 px-2 bg-black/30 backdrop-blur-sm text-white/70 hover:text-white hover:bg-black/50 border border-white/10">
+              <Upload className="w-3 h-3 mr-1" />
+              {uploading ? '…' : 'Image'}
+            </Button>
+          </>
+        )}
+        {onToggleImmersive && (
+          <Button variant="ghost" size="sm" onClick={onToggleImmersive}
+            className="text-[10px] h-6 w-6 p-0 bg-black/30 backdrop-blur-sm text-white/70 hover:text-white hover:bg-black/50 border border-white/10">
+            {isImmersive ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+          </Button>
         )}
       </div>
+
+      {/* Sprites */}
+      {Object.entries(adventureState.sprites).map(([name, pos]) => {
+        const uploadedSprite = images.find((img) => {
+          const nameWithoutExt = img.filename.replace(/\.[^.]+$/, '');
+          return nameWithoutExt === name || img.filename === name;
+        });
+        return (
+          <div key={name} className="absolute" style={{ left: pos.x, top: pos.y }}>
+            {uploadedSprite ? (
+              <img
+                src={`/api/adventure/uploads/${effectiveUserId}/${uploadedSprite.filename}`}
+                alt={name}
+                className="max-w-[120px] max-h-[120px] object-contain drop-shadow-lg"
+              />
+            ) : (
+              <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm border border-white/30 shadow-lg">
+                {name}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Story + Question + Input overlay at the bottom */}
+      {(adventureState.messages.length > 0 || adventureState.question || (isImmersive && adventureState.background)) && (
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-2 p-3">
+
+          {/* Story box */}
+          {adventureState.messages.length > 0 && (
+            <div className="rounded-xl px-4 py-3 max-h-36 overflow-y-auto space-y-1"
+              style={{ background: 'rgba(10, 15, 30, 0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {adventureState.messages.map((msg, i) => (
+                <p key={i} className="text-sm text-white/90 leading-relaxed">{msg}</p>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+
+          {/* Question box */}
+          {adventureState.question && (
+            <div className="rounded-xl px-4 py-3"
+              style={{ background: 'rgba(30, 60, 100, 0.60)', backdropFilter: 'blur(12px)', border: '1px solid rgba(100,160,255,0.2)' }}>
+              <p className="text-sm text-blue-100 leading-relaxed">{adventureState.question}</p>
+            </div>
+          )}
+
+          {/* Immersive input bar */}
+          {isImmersive && adventureState.question && (
+            <form onSubmit={handleImmersiveSubmit}>
+              <div className="rounded-xl overflow-hidden"
+                style={{ background: 'rgba(10, 15, 30, 0.55)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                <input
+                  ref={immersiveInputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Type your answer…"
+                  className="w-full bg-transparent px-4 py-2.5 text-sm text-white/90 placeholder:text-white/30 outline-none"
+                  autoComplete="off"
+                />
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
     </div>
   );

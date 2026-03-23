@@ -9,13 +9,15 @@ export interface SpriteState {
 export interface AdventureState {
   background: string | null;
   sprites: Record<string, SpriteState>;
-  dialogue: string | null;
+  messages: string[];
+  question: string | null;
 }
 
 const INITIAL_STATE: AdventureState = {
   background: null,
   sprites: {},
-  dialogue: null,
+  messages: [],
+  question: null,
 };
 
 export function useAdventureEvents(filterUserId?: string) {
@@ -47,6 +49,8 @@ export function useAdventureEvents(filterUserId?: string) {
           setState((prev) => ({
             ...prev,
             background: event.name as string,
+            messages: [],
+            question: null,
           }));
           break;
         case 'show':
@@ -76,13 +80,13 @@ export function useAdventureEvents(filterUserId?: string) {
         case 'say':
           setState((prev) => ({
             ...prev,
-            dialogue: event.text as string,
+            messages: [...prev.messages, event.text as string],
           }));
           break;
         case 'ask':
           setState((prev) => ({
             ...prev,
-            dialogue: event.prompt as string,
+            question: event.prompt as string,
           }));
           break;
       }

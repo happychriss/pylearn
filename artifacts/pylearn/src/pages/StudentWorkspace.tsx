@@ -42,6 +42,8 @@ export default function StudentWorkspace() {
   const { state: adventureState, hasNewEvent, clearNewEvent, resetState: resetAdventure, startListening, setActiveTab: setAdventureActiveTab } = useAdventureEvents();
   const [teacherViewing, setTeacherViewing] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
+  const [isAdventureImmersive, setAdventureImmersive] = useState(false);
+  const terminalPanelRef = useRef<import('react-resizable-panels').ImperativePanelHandle | null>(null);
   const { emit, on, onConnect, status: wsStatus } = useWebSocket('/api/ws');
 
   const handleLogout = async () => {
@@ -103,9 +105,27 @@ export default function StudentWorkspace() {
     if (tab === activeTab) return;
     if (tab === 'adventure') {
       clearNewEvent();
+    } else {
+      // Switching away from adventure — exit immersive
+      if (isAdventureImmersive) {
+        setAdventureImmersive(false);
+        terminalPanelRef.current?.expand();
+      }
     }
     setActiveTab(tab);
     setAdventureActiveTab(tab);
+  };
+
+  const handleToggleImmersive = () => {
+    setAdventureImmersive((prev) => {
+      const next = !prev;
+      if (next) {
+        terminalPanelRef.current?.collapse();
+      } else {
+        terminalPanelRef.current?.expand();
+      }
+      return next;
+    });
   };
 
   const showChatPanel = isAiChatOpen && activeTab !== 'adventure';
@@ -290,15 +310,27 @@ export default function StudentWorkspace() {
                         <EditorPanel onContentChange={handleEditorChange} />
                       </div>
                       <div className={`absolute inset-0 ${activeTab === 'adventure' ? '' : 'invisible'}`}>
-                        <AdventurePanel adventureState={adventureState} />
+                        <AdventurePanel
+                          adventureState={adventureState}
+                          isImmersive={isAdventureImmersive}
+                          onToggleImmersive={handleToggleImmersive}
+                          onInput={sendInput}
+                        />
                       </div>
                     </div>
                   </div>
                 </Panel>
                 
-                <PanelResizeHandle className="h-1 bg-border hover:bg-primary/50 transition-colors" />
-                
-                <Panel defaultSize={35} minSize={15} className={`${isOutputFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
+                <PanelResizeHandle className={`h-1 bg-border hover:bg-primary/50 transition-colors ${isAdventureImmersive && activeTab === 'adventure' ? 'hidden' : ''}`} />
+
+                <Panel
+                  ref={terminalPanelRef}
+                  defaultSize={35}
+                  minSize={15}
+                  collapsible
+                  collapsedSize={0}
+                  className={`${isOutputFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}
+                >
                   <div className="h-full flex flex-col bg-card border-t border-border">
                     <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
                       <span className="text-sm font-medium text-muted-foreground">
