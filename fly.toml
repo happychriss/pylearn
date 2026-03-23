@@ -31,9 +31,9 @@ primary_region = "lhr"  # London — change to nearest region
     hard_limit = 100
     soft_limit = 80
 
-# WebSocket support — keep connections alive for up to 1 hour
+# WebSocket support — max idle timeout (15 min)
 [http_service.http_options]
-  idle_timeout = 3600
+  idle_timeout = 900
 
 [[vm]]
   size = "shared-cpu-2x"
