@@ -1,0 +1,21 @@
+packages:
+  "@monaco-editor/react": "Code editor component for Python editing"
+  "react-resizable-panels": "Resizable IDE layout panels"
+  "framer-motion": "Smooth animations for UI transitions and chat bubbles"
+  "date-fns": "Date formatting for help requests and chat timestamps"
+  "zustand": "Lightweight state management for the IDE workspace"
+  "lucide-react": "Icons for the UI"
+
+images:
+  - path: "artifacts/pylearn/public/images/hero-bg.png"
+    description: "Abstract gradient mesh background in soft teal and deep blue with calm, educational vibe"
+    aspect_ratio: "16:9"
+  - path: "artifacts/pylearn/public/images/logo.png"
+    description: "Minimalist geometric logo featuring a stylized python snake forming a book or graduation cap, in calm teal"
+    aspect_ratio: "1:1"
+
+notes:
+  - "Requires @workspace/auth-web for authentication"
+  - "Requires @workspace/api-client-react for generated API hooks"
+  - "Pyodide is loaded dynamically from CDN for browser-side Python execution"
+  - "WebSocket connection expected at /ws for real-time features"

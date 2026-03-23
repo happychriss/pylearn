@@ -1,0 +1,45 @@
+# ============================================================
+# PyLearn — Fly.io configuration
+# ============================================================
+# Deploy:  fly deploy
+# Start:   fly machine start
+# Stop:    fly machine stop
+# Logs:    fly logs
+# SSH:     fly ssh console
+# ============================================================
+
+app = "pylearn"
+primary_region = "lhr"  # London — change to nearest region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  BASE_PATH = "/"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"     # Stop machine after idle (no connections)
+  auto_start_machines = true      # Wake on incoming request (~2-3s)
+  min_machines_running = 0        # Scale to zero when no one is using it
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+# WebSocket support — keep connections alive for up to 1 hour
+[http_service.http_options]
+  idle_timeout = 3600
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"
+
+# Persistent volume for adventure image uploads
+[mounts]
+  source = "pylearn_data"
+  destination = "/data"

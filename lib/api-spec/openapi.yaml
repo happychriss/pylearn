@@ -1,0 +1,904 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: PyLearn classroom API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: users
+    description: User management
+  - name: files
+    description: Student project files
+  - name: python
+    description: Python execution
+  - name: ai
+    description: AI chat and suggestions
+  - name: help
+    description: Help requests
+  - name: admin
+    description: Admin operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to the OIDC authorization endpoint.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to returnTo path on success.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '302':
+          description: Redirect to the OIDC provider logout URL.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTokenExchangeRequest'
+      responses:
+        '200':
+          description: Session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTokenExchangeSuccess'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+      responses:
+        '200':
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutSuccess'
+  /users/me:
+    get:
+      tags: [users]
+      operationId: getMyProfile
+      summary: Get current user profile with role
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /users/me/role:
+    patch:
+      tags: [users]
+      operationId: setMyRole
+      summary: Set own role (first user becomes admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRoleBody'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+  /files:
+    get:
+      tags: [files]
+      operationId: listFiles
+      summary: List files for a student
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Student ID (admin only, defaults to self)
+      responses:
+        '200':
+          description: File list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectFile'
+    post:
+      tags: [files]
+      operationId: createFile
+      summary: Create a new file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFileBody'
+      responses:
+        '201':
+          description: Created file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFile'
+  /files/{id}:
+    get:
+      tags: [files]
+      operationId: getFile
+      summary: Get file content
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: File details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFile'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    patch:
+      tags: [files]
+      operationId: updateFile
+      summary: Update file content
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFileBody'
+      responses:
+        '200':
+          description: Updated file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFile'
+    delete:
+      tags: [files]
+      operationId: deleteFile
+      summary: Delete a file
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted
+  /admin/workspace/{studentId}:
+    get:
+      tags: [admin]
+      operationId: getStudentWorkspace
+      summary: Get a student's workspace (files) for admin viewing
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Student workspace files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectFile'
+  /execute:
+    post:
+      tags: [python]
+      operationId: executePython
+      summary: Execute Python code server-side (fallback)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutePythonBody'
+      responses:
+        '200':
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+  /ai/chat:
+    post:
+      tags: [ai]
+      operationId: aiChat
+      summary: Send a message to AI assistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiChatBody'
+      responses:
+        '200':
+          description: AI response (SSE stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /ai/suggestion/accept:
+    post:
+      tags: [ai]
+      operationId: acceptSuggestion
+      summary: Accept an AI code suggestion and apply to file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptSuggestionBody'
+      responses:
+        '200':
+          description: File updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFile'
+  /ai/suggestion/reject:
+    post:
+      tags: [ai]
+      operationId: rejectSuggestion
+      summary: Reject an AI code suggestion
+      responses:
+        '200':
+          description: Suggestion rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+  /help-requests:
+    get:
+      tags: [help]
+      operationId: listHelpRequests
+      summary: List active help requests (admin)
+      responses:
+        '200':
+          description: Help request list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HelpRequest'
+    post:
+      tags: [help]
+      operationId: createHelpRequest
+      summary: Request help from teacher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHelpRequestBody'
+      responses:
+        '201':
+          description: Help request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelpRequest'
+  /help-requests/{id}/dismiss:
+    post:
+      tags: [help]
+      operationId: dismissHelpRequest
+      summary: Dismiss a help request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelpRequest'
+  /auth/student-login:
+    post:
+      tags: [Auth]
+      operationId: studentLogin
+      summary: Login a student with name and PIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentLoginBody'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentLoginSuccess'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Account paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /admin/students:
+    get:
+      tags: [admin]
+      operationId: listStudentAccounts
+      summary: List all student accounts with PIN and status
+      responses:
+        '200':
+          description: Student account list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentAccountInfo'
+    post:
+      tags: [admin]
+      operationId: createStudentAccount
+      summary: Create a new student account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentBody'
+      responses:
+        '201':
+          description: Student created with plain PIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedStudentResponse'
+  /admin/students/{id}:
+    patch:
+      tags: [admin]
+      operationId: toggleStudentPause
+      summary: Pause or resume a student account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToggleStudentPauseBody'
+      responses:
+        '200':
+          description: Student updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentAccountInfo'
+    delete:
+      tags: [admin]
+      operationId: deleteStudentAccount
+      summary: Permanently delete a student account and all their data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Student deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+  /admin/class-roster:
+    get:
+      tags: [admin]
+      operationId: listStudents
+      summary: List all students with online status
+      responses:
+        '200':
+          description: Student list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentInfo'
+  /admin/ai-config:
+    get:
+      tags: [admin]
+      operationId: getAiConfig
+      summary: Get AI configuration
+      responses:
+        '200':
+          description: AI config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiConfig'
+    put:
+      tags: [admin]
+      operationId: updateAiConfig
+      summary: Update AI configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAiConfigBody'
+      responses:
+        '200':
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiConfig'
+components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      schema:
+        type: string
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        code_verifier:
+          type: string
+          minLength: 1
+        redirect_uri:
+          type: string
+          minLength: 1
+          format: uri
+        state:
+          type: string
+          minLength: 1
+        nonce:
+          type: string
+          minLength: 1
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    UserProfile:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl, role, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+        role:
+          type: string
+          enum: [admin, student]
+        createdAt:
+          type: string
+          format: date-time
+    SetRoleBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, student]
+    ProjectFile:
+      type: object
+      required: [id, userId, filename, content, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        filename:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateFileBody:
+      type: object
+      required: [filename]
+      properties:
+        filename:
+          type: string
+        content:
+          type: string
+          default: ""
+    UpdateFileBody:
+      type: object
+      properties:
+        filename:
+          type: string
+        content:
+          type: string
+    ExecutePythonBody:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+    ExecutionResult:
+      type: object
+      required: [stdout, stderr, exitCode]
+      properties:
+        stdout:
+          type: string
+        stderr:
+          type: string
+        exitCode:
+          type: integer
+    AiChatBody:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        fileContext:
+          type: string
+        filename:
+          type: string
+        conversationHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+    AcceptSuggestionBody:
+      type: object
+      required: [fileId, newContent]
+      properties:
+        fileId:
+          type: integer
+        newContent:
+          type: string
+        lineStart:
+          type: integer
+          nullable: true
+        lineEnd:
+          type: integer
+          nullable: true
+    HelpRequest:
+      type: object
+      required: [id, userId, message, status, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userName:
+          type: [string, 'null']
+        message:
+          type: string
+        status:
+          type: string
+          enum: [active, dismissed]
+        createdAt:
+          type: string
+          format: date-time
+    CreateHelpRequestBody:
+      type: object
+      properties:
+        message:
+          type: string
+          default: "I need help"
+    StudentInfo:
+      type: object
+      required: [id, firstName, lastName, profileImageUrl, role, isOnline, hasHelpRequest]
+      properties:
+        id:
+          type: string
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+        role:
+          type: string
+        isOnline:
+          type: boolean
+        hasHelpRequest:
+          type: boolean
+    AiConfig:
+      type: object
+      required: [id, provider, mode, suggestionSystemPrompt, agentSystemPrompt, offSystemPrompt]
+      properties:
+        id:
+          type: integer
+        provider:
+          type: string
+          enum: [openai, anthropic, gemini]
+        mode:
+          type: string
+          enum: [off, suggestion, agent]
+        apiKey:
+          type: [string, 'null']
+        suggestionSystemPrompt:
+          type: string
+        agentSystemPrompt:
+          type: string
+        offSystemPrompt:
+          type: string
+    StudentLoginBody:
+      type: object
+      required: [displayName, pin]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+        pin:
+          type: string
+          minLength: 6
+          maxLength: 6
+    StudentLoginSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    CreateStudentBody:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+    CreatedStudentResponse:
+      type: object
+      required: [id, displayName, pin, createdAt]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        pin:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    StudentAccountInfo:
+      type: object
+      required: [id, displayName, pin, isPaused, createdAt, isOnline, hasHelpRequest]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        pin:
+          type: string
+        isPaused:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        isOnline:
+          type: boolean
+        hasHelpRequest:
+          type: boolean
+    ToggleStudentPauseBody:
+      type: object
+      required: [isPaused]
+      properties:
+        isPaused:
+          type: boolean
+    UpdateAiConfigBody:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [openai, anthropic, gemini]
+        mode:
+          type: string
+          enum: [off, suggestion, agent]
+        apiKey:
+          type: [string, 'null']
+        suggestionSystemPrompt:
+          type: string
+        agentSystemPrompt:
+          type: string
+        offSystemPrompt:
+          type: string
