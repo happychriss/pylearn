@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 // which helps cold start times without risking some
 // packages that are not bundle compatible
 // Bundle everything except native modules that require .node binaries
-const nativeOnly = new Set(["node-pty"]);
+const nativeOnly = new Set(["node-pty", "sharp"]);
 
 async function buildAll() {
   const distDir = path.resolve(__dirname, "dist");

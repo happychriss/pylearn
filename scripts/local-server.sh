@@ -11,6 +11,15 @@ PID_FILE="/tmp/pylearn-local.pid"
 LOG_FILE="/tmp/pylearn-local.log"
 PORT="${PYLEARN_PORT:-8080}"
 
+# --- load local secrets (gitignored) ---
+ENV_LOCAL="$ROOT_DIR/.env.local"
+if [[ -f "$ENV_LOCAL" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_LOCAL"
+  set +a
+fi
+
 # --- required env (defaults for local dev) ---
 export LOCAL_AUTH="${LOCAL_AUTH:-true}"
 export SESSION_SECRET="${SESSION_SECRET:-local-dev-secret}"
@@ -35,8 +44,23 @@ _is_running() {
 }
 
 _kill_port() {
-  # Kill anything on our port (orphaned processes, stale servers)
-  fuser -k "$PORT/tcp" 2>/dev/null || true
+  # Kill anything on our port using lsof (more reliable than fuser)
+  local pids
+  pids=$(lsof -ti "tcp:$PORT" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+  fi
+}
+
+_wait_port_free() {
+  # Wait until nothing is listening on PORT (up to 5s)
+  for _ in {1..10}; do
+    if ! lsof -ti "tcp:$PORT" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "  WARNING: port $PORT still in use after 5s"
 }
 
 _ensure_postgres() {
@@ -85,8 +109,9 @@ do_stop() {
   else
     echo "Not running (no PID file)."
   fi
-  # Belt-and-suspenders: free the port from any orphan
+  # Belt-and-suspenders: free the port from any orphan, then wait for it to be released
   _kill_port
+  _wait_port_free
 }
 
 do_build() {
@@ -112,9 +137,9 @@ do_start() {
     do_build
   fi
 
-  # free port from any orphan
+  # free port from any orphan and wait until it's available
   _kill_port
-  sleep 1
+  _wait_port_free
 
   echo "Starting PyLearn on port $PORT…"
   nohup node "$SERVER_BIN" >> "$LOG_FILE" 2>&1 &
@@ -145,7 +170,6 @@ do_start() {
 
 do_restart() {
   do_stop
-  sleep 1
   do_start
 }
 

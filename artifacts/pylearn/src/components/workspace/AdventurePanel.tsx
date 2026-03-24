@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@workspace/auth-web';
-import { Upload, Trash2, Image, Maximize2, Minimize2 } from 'lucide-react';
+import { Image, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/hooks/use-toast';
 import type { AdventureState } from '@/hooks/use-adventure-events';
 
 const BUILT_IN_BACKGROUNDS: Record<string, string> = {
@@ -28,10 +27,7 @@ interface AdventurePanelProps {
 export function AdventurePanel({ adventureState, overrideUserId, isImmersive, onToggleImmersive, onInput }: AdventurePanelProps) {
   const { user } = useAuth();
   const effectiveUserId = overrideUserId || user?.id;
-  const isReadOnly = !!overrideUserId;
   const [images, setImages] = useState<UploadedImage[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchImages = async () => {
     try {
@@ -49,62 +45,17 @@ export function AdventurePanel({ adventureState, overrideUserId, isImmersive, on
 
   useEffect(() => {
     fetchImages();
-  }, []);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: 'Error', description: 'File must be under 2 MB', variant: 'destructive' });
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-      const res = await fetch('/api/adventure/images', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      });
-      if (res.ok) {
-        toast({ title: 'Uploaded!', description: `${file.name} is ready to use.` });
-        fetchImages();
-      } else {
-        const err = await res.json();
-        toast({ title: 'Upload failed', description: err.error || 'Unknown error', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Upload failed', description: 'Network error', variant: 'destructive' });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleDelete = async (filename: string) => {
-    try {
-      const res = await fetch(`/api/adventure/images/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        setImages((prev) => prev.filter((img) => img.filename !== filename));
-        toast({ title: 'Deleted', description: `${filename} removed.` });
-      }
-    } catch {
-    }
-  };
+  }, [adventureState.background]);
 
   const getBackgroundStyle = (): React.CSSProperties => {
     const bg = adventureState.background;
     if (!bg) return { background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)' };
 
+    const bgLower = bg.toLowerCase();
     const uploadedMatch = images.find((img) => {
-      const nameWithoutExt = img.filename.replace(/\.[^.]+$/, '');
-      return nameWithoutExt === bg || img.filename === bg;
+      const nameLower = img.filename.toLowerCase();
+      const nameWithoutExt = nameLower.replace(/\.[^.]+$/, '');
+      return nameWithoutExt === bgLower || nameLower === bgLower;
     });
 
     if (uploadedMatch) {
@@ -169,31 +120,23 @@ export function AdventurePanel({ adventureState, overrideUserId, isImmersive, on
         </div>
       )}
 
-      {/* Top-right buttons: upload + immersive toggle */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-        {!isReadOnly && (
-          <>
-            <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.gif,.webp" className="hidden" onChange={handleUpload} />
-            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}
-              className="text-[10px] h-6 px-2 bg-black/30 backdrop-blur-sm text-white/70 hover:text-white hover:bg-black/50 border border-white/10">
-              <Upload className="w-3 h-3 mr-1" />
-              {uploading ? '…' : 'Image'}
-            </Button>
-          </>
-        )}
-        {onToggleImmersive && (
+      {/* Top-right buttons: immersive toggle */}
+      {onToggleImmersive && (
+        <div className="absolute top-3 right-3 z-10">
           <Button variant="ghost" size="sm" onClick={onToggleImmersive}
             className="text-[10px] h-6 w-6 p-0 bg-black/30 backdrop-blur-sm text-white/70 hover:text-white hover:bg-black/50 border border-white/10">
             {isImmersive ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Sprites */}
       {Object.entries(adventureState.sprites).map(([name, pos]) => {
+        const nameLowerSprite = name.toLowerCase();
         const uploadedSprite = images.find((img) => {
-          const nameWithoutExt = img.filename.replace(/\.[^.]+$/, '');
-          return nameWithoutExt === name || img.filename === name;
+          const filenameLower = img.filename.toLowerCase();
+          const nameWithoutExt = filenameLower.replace(/\.[^.]+$/, '');
+          return nameWithoutExt === nameLowerSprite || filenameLower === nameLowerSprite;
         });
         return (
           <div key={name} className="absolute" style={{ left: pos.x, top: pos.y }}>
@@ -214,7 +157,7 @@ export function AdventurePanel({ adventureState, overrideUserId, isImmersive, on
 
       {/* Story + Question + Input overlay at the bottom */}
       {(adventureState.messages.length > 0 || adventureState.question || (isImmersive && adventureState.background)) && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-2 p-3">
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-2 p-3 pb-4">
 
           {/* Story box */}
           {adventureState.messages.length > 0 && (

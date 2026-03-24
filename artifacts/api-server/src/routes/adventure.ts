@@ -2,11 +2,10 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import multer from "multer";
 import * as path from "path";
 import * as fs from "fs";
+import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { getUserUploadDir, UPLOAD_BASE, ALLOWED_EXTENSIONS } from "../lib/adventureStorage";
-
-const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
 const storage = multer.diskStorage({
   destination: (req: Request, _file, cb) => {
@@ -22,7 +21,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ALLOWED_EXTENSIONS.includes(ext)) {
@@ -34,19 +32,18 @@ const upload = multer({
 });
 
 function handleMulterError(err: Error | multer.MulterError | undefined, _req: Request, res: Response, next: NextFunction) {
-  if (!err) {
-    next();
-    return;
-  }
-  if (err instanceof multer.MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      res.status(413).json({ error: "File must be under 2 MB" });
-      return;
-    }
-    res.status(400).json({ error: err.message });
-    return;
-  }
-  res.status(400).json({ error: err.message || "Upload failed" });
+  if (!err) { next(); return; }
+  res.status(400).json({ error: err instanceof multer.MulterError ? err.message : (err.message || "Upload failed") });
+}
+
+async function resizeImage(filePath: string): Promise<void> {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".gif") return; // skip animated GIFs
+  const tmp = filePath + ".tmp";
+  await sharp(filePath)
+    .resize(1920, 1080, { fit: "inside", withoutEnlargement: true })
+    .toFile(tmp);
+  fs.renameSync(tmp, filePath);
 }
 
 const router = Router();
@@ -57,15 +54,18 @@ router.post("/adventure/images", (req, res, next) => {
     return;
   }
   next();
-}, upload.single("image"), handleMulterError, (req: Request, res: Response) => {
+}, upload.single("image"), handleMulterError, async (req: Request, res: Response) => {
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });
     return;
   }
-  res.json({
-    filename: req.file.filename,
-    size: req.file.size,
-  });
+  try {
+    await resizeImage(req.file.path);
+  } catch {
+    // resize failed — keep original file as-is
+  }
+  const size = fs.statSync(req.file.path).size;
+  res.json({ filename: req.file.filename, size });
 });
 
 router.get("/adventure/images", async (req, res) => {

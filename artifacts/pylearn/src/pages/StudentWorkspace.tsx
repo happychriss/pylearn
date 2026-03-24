@@ -44,6 +44,8 @@ export default function StudentWorkspace() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [isAdventureImmersive, setAdventureImmersive] = useState(false);
   const terminalPanelRef = useRef<import('react-resizable-panels').ImperativePanelHandle | null>(null);
+  const [aiPanelWidth, setAiPanelWidth] = useState(320);
+  const aiResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const { emit, on, onConnect, status: wsStatus } = useWebSocket('/api/ws');
 
   const handleLogout = async () => {
@@ -105,15 +107,33 @@ export default function StudentWorkspace() {
     if (tab === activeTab) return;
     if (tab === 'adventure') {
       clearNewEvent();
+      // Auto-expand to full adventure view
+      setAdventureImmersive(true);
+      terminalPanelRef.current?.collapse();
     } else {
-      // Switching away from adventure — exit immersive
-      if (isAdventureImmersive) {
-        setAdventureImmersive(false);
-        terminalPanelRef.current?.expand();
-      }
+      // Switching away from adventure — restore terminal
+      setAdventureImmersive(false);
+      terminalPanelRef.current?.expand();
     }
     setActiveTab(tab);
     setAdventureActiveTab(tab);
+  };
+
+  const handleAiPanelResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    aiResizeRef.current = { startX: e.clientX, startWidth: aiPanelWidth };
+    const onMove = (e: MouseEvent) => {
+      if (!aiResizeRef.current) return;
+      const delta = aiResizeRef.current.startX - e.clientX;
+      setAiPanelWidth(Math.max(220, Math.min(600, aiResizeRef.current.startWidth + delta)));
+    };
+    const onUp = () => {
+      aiResizeRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   const handleToggleImmersive = () => {
@@ -180,10 +200,16 @@ export default function StudentWorkspace() {
           <div className="flex items-center gap-2">
             <div className="font-display font-bold text-lg text-primary tracking-tight">PyLearn</div>
             <span className="text-[10px] text-muted-foreground font-mono">{APP_VERSION}</span>
+          </div>
+          <div className="w-px h-5 bg-border" />
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-sm text-foreground">
+              {[profile?.firstName ?? (user as { firstName?: string } | null)?.firstName, profile?.lastName ?? (user as { lastName?: string } | null)?.lastName].filter(Boolean).join(' ') || 'Student'}
+            </span>
             {wsStatus === 'connected' ? (
-              <Wifi size={12} className="text-green-500" title="Verbunden" />
+              <Wifi size={14} className="text-green-500" title="Connected" />
             ) : (
-              <WifiOff size={12} className="text-red-400 animate-pulse" title="Verbindung wird hergestellt..." />
+              <WifiOff size={14} className="text-red-400 animate-pulse" title="Connecting…" />
             )}
           </div>
           {teacherViewing && (
@@ -353,9 +379,15 @@ export default function StudentWorkspace() {
             </Panel>
           </PanelGroup>
         </div>
-        {isAiChatOpen && (
-          <div className={`border-l border-border ${showChatPanel ? 'w-[25%] min-w-[250px] max-w-[400px]' : 'w-0 overflow-hidden'}`}>
-            <AiPanel />
+        {isAiChatOpen && showChatPanel && (
+          <div className="flex shrink-0">
+            <div
+              className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize shrink-0"
+              onMouseDown={handleAiPanelResizeStart}
+            />
+            <div style={{ width: aiPanelWidth }} className="overflow-hidden">
+              <AiPanel />
+            </div>
           </div>
         )}
       </div>
