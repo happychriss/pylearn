@@ -20,12 +20,15 @@ import type {
   AcceptSuggestionBody,
   AiChatBody,
   AiConfig,
+  AssignToStudentBody,
   AuthUserEnvelope,
   BeginBrowserLoginParams,
   CreateFileBody,
   CreateHelpRequestBody,
+  CreatePromptTemplateBody,
   CreateStudentBody,
   CreatedStudentResponse,
+  DeletePromptTemplate200,
   DeleteStudentAccount200,
   ErrorEnvelope,
   ExecutePythonBody,
@@ -38,15 +41,19 @@ import type {
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
   ProjectFile,
+  PromptTemplate,
   RejectSuggestion200,
   SetRoleBody,
   StudentAccountInfo,
+  StudentAiConfig,
   StudentInfo,
   StudentLoginBody,
   StudentLoginSuccess,
   ToggleStudentPauseBody,
   UpdateAiConfigBody,
   UpdateFileBody,
+  UpdateStudentCreditsBody,
+  UpdateStudentCreditsResponse,
   UserProfile,
 } from "./api.schemas";
 
@@ -2406,6 +2413,505 @@ export function useListStudents<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListStudentsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Set AI credits for a student
+ */
+export const getUpdateStudentCreditsUrl = (id: string) => {
+  return `/api/admin/students/${id}/credits`;
+};
+
+export const updateStudentCredits = async (
+  id: string,
+  updateStudentCreditsBody: UpdateStudentCreditsBody,
+  options?: RequestInit,
+): Promise<UpdateStudentCreditsResponse> => {
+  return customFetch<UpdateStudentCreditsResponse>(
+    getUpdateStudentCreditsUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateStudentCreditsBody),
+    },
+  );
+};
+
+export const getUpdateStudentCreditsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateStudentCredits>>,
+    TError,
+    { id: string; data: BodyType<UpdateStudentCreditsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateStudentCredits>>,
+  TError,
+  { id: string; data: BodyType<UpdateStudentCreditsBody> },
+  TContext
+> => {
+  const mutationKey = ["updateStudentCredits"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateStudentCredits>>,
+    { id: string; data: BodyType<UpdateStudentCreditsBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateStudentCredits(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateStudentCreditsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateStudentCredits>>
+>;
+export type UpdateStudentCreditsMutationBody =
+  BodyType<UpdateStudentCreditsBody>;
+export type UpdateStudentCreditsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Set AI credits for a student
+ */
+export const useUpdateStudentCredits = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateStudentCredits>>,
+    TError,
+    { id: string; data: BodyType<UpdateStudentCreditsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateStudentCredits>>,
+  TError,
+  { id: string; data: BodyType<UpdateStudentCreditsBody> },
+  TContext
+> => {
+  return useMutation(getUpdateStudentCreditsMutationOptions(options));
+};
+
+/**
+ * @summary List all prompt templates
+ */
+export const getListPromptTemplatesUrl = () => {
+  return `/api/admin/prompts`;
+};
+
+export const listPromptTemplates = async (
+  options?: RequestInit,
+): Promise<PromptTemplate[]> => {
+  return customFetch<PromptTemplate[]>(getListPromptTemplatesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPromptTemplatesQueryKey = () => {
+  return [`/api/admin/prompts`] as const;
+};
+
+export const getListPromptTemplatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPromptTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPromptTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPromptTemplatesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPromptTemplates>>
+  > = ({ signal }) => listPromptTemplates({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPromptTemplates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPromptTemplatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPromptTemplates>>
+>;
+export type ListPromptTemplatesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all prompt templates
+ */
+
+export function useListPromptTemplates<
+  TData = Awaited<ReturnType<typeof listPromptTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPromptTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPromptTemplatesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new prompt template
+ */
+export const getCreatePromptTemplateUrl = () => {
+  return `/api/admin/prompts`;
+};
+
+export const createPromptTemplate = async (
+  createPromptTemplateBody: CreatePromptTemplateBody,
+  options?: RequestInit,
+): Promise<PromptTemplate> => {
+  return customFetch<PromptTemplate>(getCreatePromptTemplateUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createPromptTemplateBody),
+  });
+};
+
+export const getCreatePromptTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPromptTemplate>>,
+    TError,
+    { data: BodyType<CreatePromptTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPromptTemplate>>,
+  TError,
+  { data: BodyType<CreatePromptTemplateBody> },
+  TContext
+> => {
+  const mutationKey = ["createPromptTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPromptTemplate>>,
+    { data: BodyType<CreatePromptTemplateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPromptTemplate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePromptTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPromptTemplate>>
+>;
+export type CreatePromptTemplateMutationBody =
+  BodyType<CreatePromptTemplateBody>;
+export type CreatePromptTemplateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new prompt template
+ */
+export const useCreatePromptTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPromptTemplate>>,
+    TError,
+    { data: BodyType<CreatePromptTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPromptTemplate>>,
+  TError,
+  { data: BodyType<CreatePromptTemplateBody> },
+  TContext
+> => {
+  return useMutation(getCreatePromptTemplateMutationOptions(options));
+};
+
+/**
+ * @summary Delete a prompt template
+ */
+export const getDeletePromptTemplateUrl = (id: number) => {
+  return `/api/admin/prompts/${id}`;
+};
+
+export const deletePromptTemplate = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeletePromptTemplate200> => {
+  return customFetch<DeletePromptTemplate200>(getDeletePromptTemplateUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePromptTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePromptTemplate>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePromptTemplate>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deletePromptTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePromptTemplate>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deletePromptTemplate(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePromptTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePromptTemplate>>
+>;
+
+export type DeletePromptTemplateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a prompt template
+ */
+export const useDeletePromptTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePromptTemplate>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePromptTemplate>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeletePromptTemplateMutationOptions(options));
+};
+
+/**
+ * @summary Assign a prompt template to a student
+ */
+export const getAssignPromptToStudentUrl = (id: number) => {
+  return `/api/admin/prompts/${id}/assign`;
+};
+
+export const assignPromptToStudent = async (
+  id: number,
+  assignToStudentBody: AssignToStudentBody,
+  options?: RequestInit,
+): Promise<ProjectFile> => {
+  return customFetch<ProjectFile>(getAssignPromptToStudentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(assignToStudentBody),
+  });
+};
+
+export const getAssignPromptToStudentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignPromptToStudent>>,
+    TError,
+    { id: number; data: BodyType<AssignToStudentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof assignPromptToStudent>>,
+  TError,
+  { id: number; data: BodyType<AssignToStudentBody> },
+  TContext
+> => {
+  const mutationKey = ["assignPromptToStudent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof assignPromptToStudent>>,
+    { id: number; data: BodyType<AssignToStudentBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return assignPromptToStudent(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AssignPromptToStudentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof assignPromptToStudent>>
+>;
+export type AssignPromptToStudentMutationBody = BodyType<AssignToStudentBody>;
+export type AssignPromptToStudentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Assign a prompt template to a student
+ */
+export const useAssignPromptToStudent = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assignPromptToStudent>>,
+    TError,
+    { id: number; data: BodyType<AssignToStudentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof assignPromptToStudent>>,
+  TError,
+  { id: number; data: BodyType<AssignToStudentBody> },
+  TContext
+> => {
+  return useMutation(getAssignPromptToStudentMutationOptions(options));
+};
+
+/**
+ * @summary Get current AI mode for student workspace
+ */
+export const getGetStudentAiConfigUrl = () => {
+  return `/api/ai/student-config`;
+};
+
+export const getStudentAiConfig = async (
+  options?: RequestInit,
+): Promise<StudentAiConfig> => {
+  return customFetch<StudentAiConfig>(getGetStudentAiConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStudentAiConfigQueryKey = () => {
+  return [`/api/ai/student-config`] as const;
+};
+
+export const getGetStudentAiConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStudentAiConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getStudentAiConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStudentAiConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStudentAiConfig>>
+  > = ({ signal }) => getStudentAiConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStudentAiConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStudentAiConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStudentAiConfig>>
+>;
+export type GetStudentAiConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get current AI mode for student workspace
+ */
+
+export function useGetStudentAiConfig<
+  TData = Awaited<ReturnType<typeof getStudentAiConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getStudentAiConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStudentAiConfigQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

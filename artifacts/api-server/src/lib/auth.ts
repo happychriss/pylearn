@@ -7,6 +7,7 @@ import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://accounts.google.com";
 export const SESSION_COOKIE = "sid";
+export const STUDENT_SESSION_COOKIE = "sid_student";
 export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
 export interface SessionData {
@@ -78,10 +79,22 @@ export async function clearSession(
   res.clearCookie(SESSION_COOKIE, { path: "/" });
 }
 
+/**
+ * Get the session ID from the request.
+ * Checks X-Session-Type header to determine which cookie to use:
+ * - "student" → prefer sid_student cookie
+ * - "admin" or unset → prefer sid cookie
+ * Falls back to the other cookie if the preferred one is not present.
+ */
 export function getSessionId(req: Request): string | undefined {
   const authHeader = req.headers["authorization"];
   if (authHeader?.startsWith("Bearer ")) {
     return authHeader.slice(7);
   }
-  return req.cookies?.[SESSION_COOKIE];
+
+  const sessionType = req.headers["x-session-type"] as string | undefined;
+  if (sessionType === "student") {
+    return req.cookies?.[STUDENT_SESSION_COOKIE] || req.cookies?.[SESSION_COOKIE];
+  }
+  return req.cookies?.[SESSION_COOKIE] || req.cookies?.[STUDENT_SESSION_COOKIE];
 }

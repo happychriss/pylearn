@@ -533,6 +533,118 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/StudentInfo'
+  /admin/students/{id}/credits:
+    patch:
+      tags: [admin]
+      operationId: updateStudentCredits
+      summary: Set AI credits for a student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStudentCreditsBody'
+      responses:
+        '200':
+          description: Credits updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateStudentCreditsResponse'
+  /admin/prompts:
+    get:
+      tags: [admin]
+      operationId: listPromptTemplates
+      summary: List all prompt templates
+      responses:
+        '200':
+          description: Prompt template list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PromptTemplate'
+    post:
+      tags: [admin]
+      operationId: createPromptTemplate
+      summary: Create a new prompt template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePromptTemplateBody'
+      responses:
+        '201':
+          description: Created prompt template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplate'
+  /admin/prompts/{id}:
+    delete:
+      tags: [admin]
+      operationId: deletePromptTemplate
+      summary: Delete a prompt template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /admin/prompts/{id}/assign:
+    post:
+      tags: [admin]
+      operationId: assignPromptToStudent
+      summary: Assign a prompt template to a student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignToStudentBody'
+      responses:
+        '201':
+          description: Prompt assigned as file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFile'
+  /ai/student-config:
+    get:
+      tags: [ai]
+      operationId: getStudentAiConfig
+      summary: Get current AI mode for student workspace
+      responses:
+        '200':
+          description: Current AI mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentAiConfig'
   /admin/ai-config:
     get:
       tags: [admin]
@@ -666,6 +778,8 @@ components:
         createdAt:
           type: string
           format: date-time
+        aiCredits:
+          type: integer
     SetRoleBody:
       type: object
       required: [role]
@@ -802,9 +916,16 @@ components:
           type: boolean
         hasHelpRequest:
           type: boolean
+    StudentAiConfig:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [off, suggestion, agent, chat]
     AiConfig:
       type: object
-      required: [id, provider, mode, suggestionSystemPrompt, agentSystemPrompt, offSystemPrompt]
+      required: [id, provider, mode, suggestionSystemPrompt, agentSystemPrompt, offSystemPrompt, chatSystemPrompt]
       properties:
         id:
           type: integer
@@ -813,7 +934,7 @@ components:
           enum: [openai, anthropic, gemini]
         mode:
           type: string
-          enum: [off, suggestion, agent]
+          enum: [off, suggestion, agent, chat]
         apiKey:
           type: [string, 'null']
         suggestionSystemPrompt:
@@ -821,6 +942,8 @@ components:
         agentSystemPrompt:
           type: string
         offSystemPrompt:
+          type: string
+        chatSystemPrompt:
           type: string
     StudentLoginBody:
       type: object
@@ -862,7 +985,7 @@ components:
           format: date-time
     StudentAccountInfo:
       type: object
-      required: [id, displayName, pin, isPaused, createdAt, isOnline, hasHelpRequest]
+      required: [id, displayName, pin, isPaused, aiCredits, createdAt, isOnline, hasHelpRequest]
       properties:
         id:
           type: string
@@ -872,6 +995,8 @@ components:
           type: string
         isPaused:
           type: boolean
+        aiCredits:
+          type: integer
         createdAt:
           type: string
           format: date-time
@@ -893,7 +1018,7 @@ components:
           enum: [openai, anthropic, gemini]
         mode:
           type: string
-          enum: [off, suggestion, agent]
+          enum: [off, suggestion, agent, chat]
         apiKey:
           type: [string, 'null']
         suggestionSystemPrompt:
@@ -902,3 +1027,54 @@ components:
           type: string
         offSystemPrompt:
           type: string
+        chatSystemPrompt:
+          type: string
+    PromptTemplate:
+      type: object
+      required: [id, title, content, createdByAdminId, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        createdByAdminId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreatePromptTemplateBody:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        content:
+          type: string
+          default: ""
+    AssignToStudentBody:
+      type: object
+      required: [studentId]
+      properties:
+        studentId:
+          type: string
+    UpdateStudentCreditsBody:
+      type: object
+      required: [aiCredits]
+      properties:
+        aiCredits:
+          type: integer
+          minimum: 0
+    UpdateStudentCreditsResponse:
+      type: object
+      required: [id, aiCredits]
+      properties:
+        id:
+          type: string
+        aiCredits:
+          type: integer

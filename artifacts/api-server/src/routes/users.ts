@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, studentAccountsTable } from "@workspace/db";
 import { GetMyProfileResponse, SetMyRoleBody, SetMyRoleResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -21,7 +21,14 @@ router.get("/users/me", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetMyProfileResponse.parse(user));
+  // Include aiCredits for students
+  let aiCredits: number | undefined;
+  if (user.role === "student") {
+    const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, user.id));
+    if (account) aiCredits = account.aiCredits;
+  }
+
+  res.json(GetMyProfileResponse.parse({ ...user, aiCredits }));
 });
 
 router.patch("/users/me/role", async (req, res): Promise<void> => {

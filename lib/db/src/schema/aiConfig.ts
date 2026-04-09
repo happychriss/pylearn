@@ -16,6 +16,9 @@ export const aiConfigTable = pgTable("ai_config", {
   offSystemPrompt: text("off_system_prompt").notNull().default(
     "AI assistance is currently disabled by the teacher."
   ),
+  chatSystemPrompt: text("chat_system_prompt").notNull().default(
+    "You are a friendly AI assistant for children aged 11-14 who are learning about AI. Keep your answers simple, age-appropriate, and safe. Never provide inappropriate content. Encourage curiosity and critical thinking about AI. If asked something inappropriate, gently redirect the conversation. Do not write code — this mode is for learning about AI, not coding."
+  ),
 });
 
 export const insertAiConfigSchema = createInsertSchema(aiConfigTable).omit({ id: true });

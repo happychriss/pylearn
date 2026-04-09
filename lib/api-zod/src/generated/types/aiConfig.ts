@@ -17,4 +17,5 @@ export interface AiConfig {
   suggestionSystemPrompt: string;
   agentSystemPrompt: string;
   offSystemPrompt: string;
+  chatSystemPrompt: string;
 }

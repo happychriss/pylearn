@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useCreateFile, useDeleteFile } from '@workspace/api-client-react';
-import { FileCode, Plus, Trash2, File as FileIcon, Image, Upload } from 'lucide-react';
+import { FileCode, Plus, Trash2, File as FileIcon, Image, Upload, MessageCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
@@ -12,7 +12,13 @@ interface UploadedImage {
   size: number;
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  onFileSelect?: () => void;
+  aiMode?: string;
+  onPromptSelect?: (content: string) => void;
+}
+
+export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) {
   const { openFiles, activeFileId, setActiveFile, unsavedChanges } = useWorkspaceStore();
   const createFile = useCreateFile();
   const deleteFile = useDeleteFile();
@@ -81,8 +87,10 @@ export function Sidebar() {
   return (
     <div className="h-full bg-sidebar flex flex-col border-r border-border">
       <div className="p-4 border-b border-border flex items-center justify-between">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">Files</h2>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">
+          {aiMode === 'chat' ? 'Prompts' : 'Files'}
+        </h2>
+        {aiMode !== 'chat' && <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-sidebar-accent">
               <Plus className="w-4 h-4" />
@@ -104,34 +112,66 @@ export function Sidebar() {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+        </Dialog>}
       </div>
       
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {openFiles.length === 0 ? (
-          <div className="text-center p-4 text-sm text-muted-foreground flex flex-col items-center">
-            <FileIcon className="w-8 h-8 mb-2 opacity-20" />
-            <p>No files yet.</p>
-          </div>
-        ) : (
-          openFiles.map(file => {
+        {(() => {
+          const isChatMode = aiMode === 'chat';
+          const filteredFiles = openFiles.filter(f =>
+            isChatMode ? f.filename.endsWith('.prompt') : !f.filename.endsWith('.prompt')
+          );
+
+          if (filteredFiles.length === 0) {
+            return (
+              <div className="text-center p-4 text-sm text-muted-foreground flex flex-col items-center">
+                {isChatMode ? (
+                  <>
+                    <MessageCircle className="w-8 h-8 mb-2 opacity-20" />
+                    <p>No prompts yet.</p>
+                    <p className="text-xs mt-1">Your teacher will assign prompts.</p>
+                  </>
+                ) : (
+                  <>
+                    <FileIcon className="w-8 h-8 mb-2 opacity-20" />
+                    <p>No files yet.</p>
+                  </>
+                )}
+              </div>
+            );
+          }
+
+          return filteredFiles.map(file => {
             const isDirty = unsavedChanges[file.id] !== undefined;
             const isActive = activeFileId === file.id;
+            const isPrompt = file.filename.endsWith('.prompt');
+            const displayName = isPrompt ? file.filename.replace(/\.prompt$/, '') : file.filename;
 
             return (
               <div
                 key={file.id}
-                onClick={() => setActiveFile(file.id)}
+                onClick={() => {
+                  if (isPrompt && onPromptSelect) {
+                    onPromptSelect(file.content);
+                  } else {
+                    setActiveFile(file.id);
+                    onFileSelect?.();
+                  }
+                }}
                 className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${
-                  isActive
+                  isActive && !isPrompt
                     ? 'bg-primary/10 text-primary font-medium'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 }`}
               >
                 <div className="flex items-center gap-2 overflow-hidden">
-                  <FileCode className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span className="truncate text-sm">{file.filename}</span>
-                  {isDirty && <span className="w-2 h-2 rounded-full bg-accent shrink-0" />}
+                  {isPrompt ? (
+                    <MessageCircle className="w-4 h-4 shrink-0 text-accent" />
+                  ) : (
+                    <FileCode className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                  )}
+                  <span className="truncate text-sm">{displayName}</span>
+                  {isDirty && !isPrompt && <span className="w-2 h-2 rounded-full bg-accent shrink-0" />}
                 </div>
                 <Button
                   variant="ghost"
@@ -152,12 +192,12 @@ export function Sidebar() {
                 </Button>
               </div>
             );
-          })
-        )}
+          });
+        })()}
       </div>
 
-      {/* Images section */}
-      <div className="border-t border-border shrink-0">
+      {/* Images section — hidden in chat mode */}
+      {aiMode !== 'chat' && <div className="border-t border-border shrink-0">
         <div className="p-4 flex items-center justify-between">
           <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">Images</h2>
           <input ref={imageInputRef} type="file" accept=".jpg,.jpeg,.png,.gif,.webp" className="hidden" onChange={handleUploadImage} />
@@ -189,7 +229,7 @@ export function Sidebar() {
           <p className="px-4 pb-2 text-xs text-muted-foreground">No images yet.</p>
         )}
         <div className="h-3 shrink-0" />
-      </div>
+      </div>}
     </div>
   );
 }

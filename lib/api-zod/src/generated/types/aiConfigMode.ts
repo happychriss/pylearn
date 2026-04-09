@@ -12,4 +12,5 @@ export const AiConfigMode = {
   off: "off",
   suggestion: "suggestion",
   agent: "agent",
+  chat: "chat",
 } as const;

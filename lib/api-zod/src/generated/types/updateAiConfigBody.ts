@@ -16,4 +16,5 @@ export interface UpdateAiConfigBody {
   suggestionSystemPrompt?: string;
   agentSystemPrompt?: string;
   offSystemPrompt?: string;
+  chatSystemPrompt?: string;
 }

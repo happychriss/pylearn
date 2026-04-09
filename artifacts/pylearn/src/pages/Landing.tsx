@@ -6,6 +6,10 @@ import { Input } from '@/components/ui/input';
 import { BookOpen, Sparkles, Code2, Users, GraduationCap, ShieldCheck } from 'lucide-react';
 import { APP_VERSION } from '@/lib/version';
 import { useGetMyProfile } from '@workspace/api-client-react';
+import { setSessionType } from '@/lib/session-type';
+
+// Landing page checks admin session by default
+setSessionType('admin');
 
 const PIN_LENGTH = 6;
 
@@ -102,16 +106,17 @@ export default function Landing() {
   const [pin, setPin] = useState('');
   const [studentError, setStudentError] = useState('');
   const [studentLoading, setStudentLoading] = useState(false);
+  const [isLocalMode, setIsLocalMode] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated && profile) {
-      if (profile.role === 'admin') {
-        setLocation('/admin');
-      } else {
-        setLocation('/workspace');
-      }
-    }
-  }, [isAuthenticated, profile, setLocation]);
+    fetch('/api/auth/mode', { credentials: 'include' })
+      .then(r => r.json())
+      .then((data: { isLocal: boolean }) => setIsLocalMode(data.isLocal))
+      .catch(() => {});
+  }, []);
+
+  // No auto-redirect — landing page always shows the login options.
+  // Users navigate to /workspace or /admin explicitly after login.
 
   const handleStudentLogin = async () => {
     setStudentError('');
@@ -214,14 +219,34 @@ export default function Landing() {
                 <ShieldCheck className="w-7 h-7 text-muted-foreground" />
               </div>
               <h2 className="text-lg font-bold mb-4">I'm a Teacher</h2>
-              <p className="text-sm text-muted-foreground mb-6 flex-1">Sign in with your Google account to access the admin dashboard.</p>
-              <Button 
-                onClick={login}
-                variant="outline"
-                className="w-full h-12 rounded-2xl"
-              >
-                Sign In with Google
-              </Button>
+              {isAuthenticated && profile?.role === 'admin' ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-6 flex-1">
+                    Welcome back, {profile.firstName || 'Teacher'}!
+                  </p>
+                  <Button
+                    onClick={() => setLocation('/admin')}
+                    className="w-full h-12 rounded-2xl"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-6 flex-1">
+                    {isLocalMode
+                      ? 'Click to sign in as the local teacher.'
+                      : 'Sign in with your Google account to access the admin dashboard.'}
+                  </p>
+                  <Button
+                    onClick={login}
+                    variant="outline"
+                    className="w-full h-12 rounded-2xl"
+                  >
+                    {isLocalMode ? 'Log in' : 'Sign In with Google'}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 

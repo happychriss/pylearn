@@ -135,10 +135,14 @@ export function useChatStream() {
   };
 
   const removeSuggestion = (messageId: string) => {
-    setMessages(prev => 
+    setMessages(prev =>
       prev.map(m => m.id === messageId ? { ...m, suggestion: undefined } : m)
     );
   };
 
-  return { messages, sendMessage, isStreaming, removeSuggestion };
+  const clearMessages = () => {
+    setMessages([]);
+  };
+
+  return { messages, sendMessage, isStreaming, removeSuggestion, clearMessages };
 }

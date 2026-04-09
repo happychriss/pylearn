@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, filesTable, aiConfigTable, usersTable } from "@workspace/db";
+import { db, filesTable, aiConfigTable, usersTable, studentAccountsTable } from "@workspace/db";
 import { AiChatBody, AcceptSuggestionBody, AcceptSuggestionResponse } from "@workspace/api-zod";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { getOpenAiClient } from "@workspace/integrations-openai-ai-server";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
+import { PYLEARN_LIBRARY_REFERENCE } from "../lib/pylearn-ref";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,15 @@ function resolveApiKey(config: { provider: string; apiKey: string | null }): str
   }
   return key;
 }
+
+router.get("/ai/student-config", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const config = await getAiConfig();
+  res.json({ mode: config.mode });
+});
 
 const SUGGESTION_INSTRUCTION = `\n\nWhen you want to suggest a code change, you MUST end your response with a JSON block in exactly this format:
 ---SUGGESTION---
@@ -92,11 +102,9 @@ async function streamFromProvider(
   let fullContent = "";
 
   if (config.provider === "openai") {
-    if (!openai) {
-      throw new Error("OpenAI is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY environment variable.");
-    }
-    const stream = await openai.chat.completions.create({
-      model: "gpt-5.2",
+    const client = getOpenAiClient(config.apiKey);
+    const stream = await client.chat.completions.create({
+      model: "gpt-4o",
       max_completion_tokens: 8192,
       messages,
       stream: true,
@@ -189,11 +197,36 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  let systemPrompt = config.mode === "suggestion"
-    ? config.suggestionSystemPrompt
-    : config.agentSystemPrompt;
+  // Credit check for chat mode (students only)
+  if (config.mode === "chat") {
+    const [currentUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
+    if (currentUser?.role === "student") {
+      const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, req.user.id));
+      if (account && account.aiCredits <= 0) {
+        res.status(403).json({ error: "No credits remaining. Contact your teacher for more credits." });
+        return;
+      }
+      // Decrement credit
+      if (account) {
+        await db
+          .update(studentAccountsTable)
+          .set({ aiCredits: account.aiCredits - 1 })
+          .where(eq(studentAccountsTable.id, req.user.id));
+      }
+    }
+  }
+
+  let systemPrompt: string;
+  if (config.mode === "chat") {
+    systemPrompt = config.chatSystemPrompt;
+  } else if (config.mode === "suggestion") {
+    systemPrompt = config.suggestionSystemPrompt;
+  } else {
+    systemPrompt = config.agentSystemPrompt;
+  }
 
   if (config.mode === "suggestion" || config.mode === "agent") {
+    systemPrompt += `\n\n---\n${PYLEARN_LIBRARY_REFERENCE}`;
     systemPrompt += SUGGESTION_INSTRUCTION;
   }
 

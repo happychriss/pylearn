@@ -271,6 +271,13 @@ async function parseSuccessBody(
   }
 }
 
+// Session type getter — injected by the app to route requests to the correct session cookie
+let _getSessionType: (() => string) | null = null;
+
+export function setSessionTypeGetter(getter: () => string) {
+  _getSessionType = getter;
+}
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
@@ -284,6 +291,11 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+
+  // Inject session type header for dual-session support
+  if (_getSessionType && !headers.has("x-session-type")) {
+    headers.set("x-session-type", _getSessionType());
+  }
 
   if (
     typeof init.body === "string" &&

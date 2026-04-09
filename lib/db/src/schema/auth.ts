@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 
 export const sessionsTable = pgTable(
   "sessions",
@@ -28,6 +28,7 @@ export const studentAccountsTable = pgTable("student_accounts", {
   pinHash: varchar("pin_hash").notNull(),
   pinPlain: varchar("pin_plain").notNull(),
   isPaused: boolean("is_paused").notNull().default(false),
+  aiCredits: integer("ai_credits").notNull().default(10),
   createdByAdminId: varchar("created_by_admin_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

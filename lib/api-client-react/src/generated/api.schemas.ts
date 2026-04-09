@@ -71,6 +71,7 @@ export interface UserProfile {
   profileImageUrl: string | null;
   role: UserProfileRole;
   createdAt: string;
+  aiCredits?: number;
 }
 
 export type SetRoleBodyRole =
@@ -177,6 +178,20 @@ export interface StudentInfo {
   hasHelpRequest: boolean;
 }
 
+export type StudentAiConfigMode =
+  (typeof StudentAiConfigMode)[keyof typeof StudentAiConfigMode];
+
+export const StudentAiConfigMode = {
+  off: "off",
+  suggestion: "suggestion",
+  agent: "agent",
+  chat: "chat",
+} as const;
+
+export interface StudentAiConfig {
+  mode: StudentAiConfigMode;
+}
+
 export type AiConfigProvider =
   (typeof AiConfigProvider)[keyof typeof AiConfigProvider];
 
@@ -192,6 +207,7 @@ export const AiConfigMode = {
   off: "off",
   suggestion: "suggestion",
   agent: "agent",
+  chat: "chat",
 } as const;
 
 export interface AiConfig {
@@ -203,6 +219,7 @@ export interface AiConfig {
   suggestionSystemPrompt: string;
   agentSystemPrompt: string;
   offSystemPrompt: string;
+  chatSystemPrompt: string;
 }
 
 export interface StudentLoginBody {
@@ -237,6 +254,7 @@ export interface StudentAccountInfo {
   displayName: string;
   pin: string;
   isPaused: boolean;
+  aiCredits: number;
   createdAt: string;
   isOnline: boolean;
   hasHelpRequest: boolean;
@@ -262,6 +280,7 @@ export const UpdateAiConfigBodyMode = {
   off: "off",
   suggestion: "suggestion",
   agent: "agent",
+  chat: "chat",
 } as const;
 
 export interface UpdateAiConfigBody {
@@ -272,6 +291,36 @@ export interface UpdateAiConfigBody {
   suggestionSystemPrompt?: string;
   agentSystemPrompt?: string;
   offSystemPrompt?: string;
+  chatSystemPrompt?: string;
+}
+
+export interface PromptTemplate {
+  id: number;
+  title: string;
+  content: string;
+  createdByAdminId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePromptTemplateBody {
+  /** @minLength 1 */
+  title: string;
+  content?: string;
+}
+
+export interface AssignToStudentBody {
+  studentId: string;
+}
+
+export interface UpdateStudentCreditsBody {
+  /** @minimum 0 */
+  aiCredits: number;
+}
+
+export interface UpdateStudentCreditsResponse {
+  id: string;
+  aiCredits: number;
 }
 
 export type AuthorizationSessionHeaderParameter = string;
@@ -299,4 +348,8 @@ export type RejectSuggestion200 = {
 
 export type DeleteStudentAccount200 = {
   success: boolean;
+};
+
+export type DeletePromptTemplate200 = {
+  ok?: boolean;
 };

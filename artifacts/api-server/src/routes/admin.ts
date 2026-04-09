@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
+import { PYLEARN_LIBRARY_REFERENCE } from "../lib/pylearn-ref";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import * as fs from "fs";
@@ -16,7 +17,7 @@ import {
   ToggleStudentPauseBody,
 } from "@workspace/api-zod";
 import { onlineUsers } from "../lib/wsState";
-import { closeUserConnections } from "../lib/websocket";
+import { closeUserConnections, broadcastToStudents } from "../lib/websocket";
 import { sessionsTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -103,7 +104,7 @@ router.post("/admin/students", async (req, res): Promise<void> => {
       displayName,
       pinHash,
       pinPlain: pin,
-      createdByAdminId: req.user.id,
+      createdByAdminId: req.user!.id,
     });
 
     const [created] = await tx
@@ -139,6 +140,7 @@ router.get("/admin/students", async (req, res): Promise<void> => {
     displayName: a.displayName,
     pin: a.pinPlain,
     isPaused: a.isPaused,
+    aiCredits: a.aiCredits,
     createdAt: a.createdAt,
     isOnline: onlineUsers.has(a.id),
     hasHelpRequest: helpUserIds.has(a.id),
@@ -247,6 +249,40 @@ router.delete("/admin/students/:id", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+router.patch("/admin/students/:id/credits", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const studentId = req.params.id;
+  const { aiCredits } = req.body;
+
+  if (typeof aiCredits !== "number" || aiCredits < 0) {
+    res.status(400).json({ error: "aiCredits must be a non-negative number" });
+    return;
+  }
+
+  const [account] = await db
+    .select()
+    .from(studentAccountsTable)
+    .where(eq(studentAccountsTable.id, studentId));
+
+  if (!account) {
+    res.status(404).json({ error: "Student not found" });
+    return;
+  }
+
+  await db
+    .update(studentAccountsTable)
+    .set({ aiCredits })
+    .where(eq(studentAccountsTable.id, studentId));
+
+  res.json({ id: studentId, aiCredits });
+});
+
+router.get("/admin/ai-library-ref", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+  res.json({ content: PYLEARN_LIBRARY_REFERENCE });
+});
+
 router.get("/admin/ai-config", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
@@ -290,12 +326,19 @@ router.put("/admin/ai-config", async (req, res): Promise<void> => {
   if (parsed.data.suggestionSystemPrompt !== undefined) updateData.suggestionSystemPrompt = parsed.data.suggestionSystemPrompt;
   if (parsed.data.agentSystemPrompt !== undefined) updateData.agentSystemPrompt = parsed.data.agentSystemPrompt;
   if (parsed.data.offSystemPrompt !== undefined) updateData.offSystemPrompt = parsed.data.offSystemPrompt;
+  if (parsed.data.chatSystemPrompt !== undefined) updateData.chatSystemPrompt = parsed.data.chatSystemPrompt;
+
+  const modeChanged = parsed.data.mode !== undefined && parsed.data.mode !== config.mode;
 
   const [updated] = await db
     .update(aiConfigTable)
     .set(updateData)
     .where(eq(aiConfigTable.id, config.id))
     .returning();
+
+  if (modeChanged) {
+    broadcastToStudents({ type: "ai-mode-changed", mode: updated.mode });
+  }
 
   const safeUpdated = { ...updated, apiKey: updated.apiKey ? "********" : null };
   res.json(UpdateAiConfigResponse.parse(safeUpdated));

@@ -1,35 +1,43 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'wouter';
 import { useAuth } from '@workspace/auth-web';
+import { setSessionType } from '@/lib/session-type';
+
+// Set session type before any hooks fire
+setSessionType('student');
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from '@/components/workspace/Sidebar';
 import { EditorPanel } from '@/components/workspace/EditorPanel';
 import { AiPanel } from '@/components/workspace/AiPanel';
+import { AiChatPanel } from '@/components/workspace/AiChatPanel';
 import { Terminal } from '@/components/workspace/Terminal';
-import { AdventurePanel } from '@/components/workspace/AdventurePanel';
-import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile } from '@workspace/api-client-react';
+import { OutputPanel } from '@/components/workspace/OutputPanel';
+import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile, useGetStudentAiConfig } from '@workspace/api-client-react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Save, Maximize2, Minimize2, Hand, MessageSquare, Code, Swords, LogOut, Wifi, WifiOff } from 'lucide-react';
+import { Play, Square, Save, Maximize2, Minimize2, Hand, MessageSquare, Code, Monitor, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { usePtySession } from '@/hooks/use-pty-session';
 import { useWebSocket } from '@/hooks/use-websocket';
-import { useAdventureEvents } from '@/hooks/use-adventure-events';
+import { useDisplayEvents } from '@/hooks/use-display-events';
 import { toast } from '@/hooks/use-toast';
 import { APP_VERSION } from '@/lib/version';
 import type { Terminal as XTerm } from '@xterm/xterm';
 
-type ActiveTab = 'code' | 'adventure';
+type ActiveTab = 'code' | 'output';
 
 export default function StudentWorkspace() {
-  const { user } = useAuth();
-  const { data: profile } = useGetMyProfile();
-  const { data: files } = useListFiles({}, { query: { refetchInterval: 5000 } });
+  const { user, isLoading, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+  const { data: profile, refetch: refetchProfile } = useGetMyProfile({ query: { enabled: isAuthenticated } });
+  const { data: files } = useListFiles({}, { query: { enabled: isAuthenticated, refetchInterval: 5000 } });
+  const { data: aiConfig } = useGetStudentAiConfig({ query: { enabled: isAuthenticated, refetchInterval: 10000 } });
   const updateFile = useUpdateFile();
   const helpReq = useCreateHelpRequest();
-  
-  const { 
-    setOpenFiles, 
-    activeFileId, 
-    unsavedChanges, 
+
+  const {
+    setOpenFiles,
+    activeFileId,
+    unsavedChanges,
     clearUnsavedContent,
     isOutputFullscreen,
     setFullscreen,
@@ -39,24 +47,26 @@ export default function StudentWorkspace() {
   } = useWorkspaceStore();
 
   const { isRunning, runCode, sendInput, stopCode, listen } = usePtySession();
-  const { state: adventureState, hasNewEvent, clearNewEvent, resetState: resetAdventure, startListening, setActiveTab: setAdventureActiveTab } = useAdventureEvents();
+  const {
+    displayMessages, adventureState, hasNewEvent, hasDisplayContent, hasAdventureContent,
+    clearNewEvent, resetState: resetDisplay, setActiveTab: setDisplayActiveTab,
+  } = useDisplayEvents();
   const [teacherViewing, setTeacherViewing] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
-  const [isAdventureImmersive, setAdventureImmersive] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [modeChangedWhileActive, setModeChangedWhileActive] = useState(false);
+  const [isOutputImmersive, setOutputImmersive] = useState(false);
   const terminalPanelRef = useRef<import('react-resizable-panels').ImperativePanelHandle | null>(null);
   const [aiPanelWidth, setAiPanelWidth] = useState(320);
   const aiResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const { emit, on, onConnect, status: wsStatus } = useWebSocket('/api/ws');
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
-    window.location.href = '/';
-  };
   const terminalRef = useRef<XTerm | null>(null);
 
   useEffect(() => {
-    startListening();
-  }, [startListening]);
+    if (!isLoading && !isAuthenticated) {
+      setLocation('/');
+    }
+  }, [isLoading, isAuthenticated, setLocation]);
 
   useEffect(() => {
     if (files) setOpenFiles(files);
@@ -100,23 +110,61 @@ export default function StudentWorkspace() {
         updateUnsavedContent(targetFileId, msg.content as string);
       }
     });
-    return () => { off1(); off2(); off3(); off4(); };
+    const off5 = on('ai-mode-changed', () => setModeChangedWhileActive(true));
+    return () => { off1(); off2(); off3(); off4(); off5(); };
   }, [on, user?.id, updateUnsavedContent]);
+
+  if (isLoading) {
+    return <div className="h-dvh w-full flex items-center justify-center bg-background text-muted-foreground">Loading...</div>;
+  }
+  if (!isAuthenticated) return null;
+
+  if (modeChangedWhileActive) {
+    return (
+      <div className="h-dvh w-full flex items-center justify-center bg-background px-4">
+        <div className="p-8 rounded-2xl bg-card border shadow-lg text-center max-w-sm w-full">
+          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <MessageSquare className="w-7 h-7 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Classroom mode changed</h2>
+          <p className="text-muted-foreground mb-6">
+            Your teacher has updated the classroom settings. Please log out and sign back in to continue.
+          </p>
+          <Button
+            onClick={async () => {
+              await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
+              window.location.href = '/';
+            }}
+            className="w-full rounded-xl"
+          >
+            <LogOut className="w-4 h-4 mr-2" /> Log out
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
+    window.location.href = '/';
+  };
 
   const handleTabChange = (tab: ActiveTab) => {
     if (tab === activeTab) return;
-    if (tab === 'adventure') {
+    if (tab === 'output') {
       clearNewEvent();
-      // Auto-expand to full adventure view
-      setAdventureImmersive(true);
-      terminalPanelRef.current?.collapse();
+      // If adventure content, go immersive
+      if (hasAdventureContent) {
+        setOutputImmersive(true);
+        terminalPanelRef.current?.collapse();
+      }
     } else {
-      // Switching away from adventure — restore terminal
-      setAdventureImmersive(false);
+      // Switching away from output — restore terminal
+      setOutputImmersive(false);
       terminalPanelRef.current?.expand();
     }
     setActiveTab(tab);
-    setAdventureActiveTab(tab);
+    setDisplayActiveTab(tab);
   };
 
   const handleAiPanelResizeStart = (e: React.MouseEvent) => {
@@ -137,7 +185,7 @@ export default function StudentWorkspace() {
   };
 
   const handleToggleImmersive = () => {
-    setAdventureImmersive((prev) => {
+    setOutputImmersive((prev) => {
       const next = !prev;
       if (next) {
         terminalPanelRef.current?.collapse();
@@ -148,7 +196,7 @@ export default function StudentWorkspace() {
     });
   };
 
-  const showChatPanel = isAiChatOpen && activeTab !== 'adventure';
+  const showChatPanel = isAiChatOpen && !(activeTab === 'output' && isOutputImmersive);
 
   const handleSave = () => {
     if (!activeFileId || !unsavedChanges[activeFileId]) return;
@@ -169,7 +217,7 @@ export default function StudentWorkspace() {
     const content = activeFileId ? (unsavedChanges[activeFileId] ?? activeFile?.content ?? '') : '';
     if (!content) return;
     terminalRef.current?.clear();
-    resetAdventure();
+    resetDisplay();
     runCode(content);
   };
 
@@ -192,6 +240,9 @@ export default function StudentWorkspace() {
 
   const activeFile = files?.find(f => f.id === activeFileId);
   const isDirty = activeFileId ? unsavedChanges[activeFileId] !== undefined : false;
+  const isChatMode = aiConfig?.mode === 'chat';
+  const isAiEnabled = aiConfig?.mode !== 'off';
+  const aiCredits = (profile as Record<string, unknown> | undefined)?.aiCredits as number | undefined;
 
   return (
     <div className="h-dvh w-full flex flex-col bg-background overflow-hidden font-sans">
@@ -221,46 +272,50 @@ export default function StudentWorkspace() {
         </div>
         
         <div className="flex items-center gap-2">
-          {activeFile && (
-            <span className="text-sm text-muted-foreground mr-4">
-              {activeFile.filename} {isDirty && '*'}
-            </span>
-          )}
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleSave} 
-            disabled={!isDirty || updateFile.isPending}
-            className="rounded-xl"
-          >
-            <Save className="w-4 h-4 mr-2" /> Save
-          </Button>
-          
-          {isRunning ? (
-            <Button
-              onClick={stopCode}
-              size="sm"
-              className="rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
-            >
-              <Square className="w-4 h-4 mr-2" /> Stop
-            </Button>
-          ) : (
-            <Button 
-              onClick={handleRun} 
-              disabled={!activeFileId}
-              size="sm"
-              className="rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-600/20"
-            >
-              <Play className="w-4 h-4 mr-2" /> Run
-            </Button>
+          {!isChatMode && (
+            <>
+              {activeFile && (
+                <span className="text-sm text-muted-foreground mr-4">
+                  {activeFile.filename} {isDirty && '*'}
+                </span>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSave}
+                disabled={!isDirty || updateFile.isPending}
+                className="rounded-xl"
+              >
+                <Save className="w-4 h-4 mr-2" /> Save
+              </Button>
+
+              {isRunning ? (
+                <Button
+                  onClick={stopCode}
+                  size="sm"
+                  className="rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
+                >
+                  <Square className="w-4 h-4 mr-2" /> Stop
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleRun}
+                  disabled={!activeFileId}
+                  size="sm"
+                  className="rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-600/20"
+                >
+                  <Play className="w-4 h-4 mr-2" /> Run
+                </Button>
+              )}
+
+              <div className="w-px h-6 bg-border mx-2" />
+            </>
           )}
 
-          <div className="w-px h-6 bg-border mx-2" />
-
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleHelp}
             disabled={helpReq.isPending}
             className="rounded-xl border-accent text-accent hover:bg-accent hover:text-accent-foreground"
@@ -268,14 +323,16 @@ export default function StudentWorkspace() {
             <Hand className="w-4 h-4 mr-2" /> Need Help
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleAiChat}
-            className={`rounded-xl ${isAiChatOpen ? 'bg-primary/10 text-primary' : ''}`}
-          >
-            <MessageSquare className="w-4 h-4" />
-          </Button>
+          {!isChatMode && isAiEnabled && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleAiChat}
+              className={`rounded-xl ${isAiChatOpen ? 'bg-primary/10 text-primary' : ''}`}
+            >
+              <MessageSquare className="w-4 h-4" />
+            </Button>
+          )}
 
           <div className="w-px h-6 bg-border mx-1" />
 
@@ -292,103 +349,134 @@ export default function StudentWorkspace() {
       </header>
 
       <div className="flex-1 overflow-hidden flex">
-        <div className="flex-1 overflow-hidden">
-          <PanelGroup direction="horizontal">
-            <Panel defaultSize={15} minSize={10} maxSize={25}>
-              <Sidebar />
-            </Panel>
-            
-            <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
-            
-            <Panel defaultSize={85}>
-              <PanelGroup direction="vertical">
-                <Panel defaultSize={65}>
-                  <div className="h-full flex flex-col">
-                    <div className="flex items-center border-b border-border bg-muted/30 shrink-0">
-                      <button
-                        onClick={() => handleTabChange('code')}
-                        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                          activeTab === 'code'
-                            ? 'border-primary text-primary bg-background'
-                            : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                        }`}
-                      >
-                        <Code className="w-4 h-4" />
-                        Source Code
-                      </button>
-                      <button
-                        onClick={() => handleTabChange('adventure')}
-                        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 relative ${
-                          activeTab === 'adventure'
-                            ? 'border-primary text-primary bg-background'
-                            : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                        }`}
-                      >
-                        <Swords className="w-4 h-4" />
-                        Adventure
-                        {hasNewEvent && activeTab !== 'adventure' && (
-                          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="flex-1 overflow-hidden relative">
-                      <div className={`absolute inset-0 ${activeTab === 'code' ? '' : 'invisible'}`}>
-                        <EditorPanel onContentChange={handleEditorChange} />
-                      </div>
-                      <div className={`absolute inset-0 ${activeTab === 'adventure' ? '' : 'invisible'}`}>
-                        <AdventurePanel
-                          adventureState={adventureState}
-                          isImmersive={isAdventureImmersive}
-                          onToggleImmersive={handleToggleImmersive}
-                          onInput={sendInput}
-                        />
-                      </div>
-                    </div>
-                  </div>
+        {isChatMode ? (
+          /* ---- Chat Mode Layout ---- */
+          <>
+            <div className="flex-1 overflow-hidden">
+              <PanelGroup direction="horizontal">
+                <Panel defaultSize={15} minSize={10} maxSize={25}>
+                  <Sidebar
+                    aiMode="chat"
+                    onPromptSelect={(content) => setPendingPrompt(content)}
+                  />
                 </Panel>
-                
-                <PanelResizeHandle className={`h-1 bg-border hover:bg-primary/50 transition-colors ${isAdventureImmersive && activeTab === 'adventure' ? 'hidden' : ''}`} />
-
-                <Panel
-                  ref={terminalPanelRef}
-                  defaultSize={35}
-                  minSize={15}
-                  collapsible
-                  collapsedSize={0}
-                  className={`${isOutputFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}
-                >
-                  <div className="h-full flex flex-col bg-card border-t border-border">
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-                      <span className="text-sm font-medium text-muted-foreground">
-                        Terminal {isRunning && <span className="text-green-500 animate-pulse">● Running</span>}
-                      </span>
-                      <Button variant="ghost" size="icon" onClick={() => setFullscreen(!isOutputFullscreen)} className="w-6 h-6">
-                        {isOutputFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                    <div className="flex-1 overflow-hidden bg-[#0f172a]">
-                      <Terminal
-                        terminalRef={terminalRef}
-                        onInput={sendInput}
-                      />
-                    </div>
-                    <div className="h-3 bg-card shrink-0" />
-                  </div>
+                <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                <Panel defaultSize={85}>
+                  <AiChatPanel
+                    credits={aiCredits ?? 0}
+                    onCreditUsed={() => refetchProfile()}
+                    initialPrompt={pendingPrompt ?? undefined}
+                    onPromptConsumed={() => setPendingPrompt(null)}
+                  />
                 </Panel>
               </PanelGroup>
-            </Panel>
-          </PanelGroup>
-        </div>
-        {isAiChatOpen && showChatPanel && (
-          <div className="flex shrink-0">
-            <div
-              className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize shrink-0"
-              onMouseDown={handleAiPanelResizeStart}
-            />
-            <div style={{ width: aiPanelWidth }} className="overflow-hidden">
-              <AiPanel />
             </div>
-          </div>
+          </>
+        ) : (
+          /* ---- Normal Coding Layout ---- */
+          <>
+            <div className="flex-1 overflow-hidden">
+              <PanelGroup direction="horizontal">
+                <Panel defaultSize={15} minSize={10} maxSize={25}>
+                  <Sidebar onFileSelect={() => handleTabChange('code')} aiMode={aiConfig?.mode} />
+                </Panel>
+
+                <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+
+                <Panel defaultSize={85}>
+                  <PanelGroup direction="vertical">
+                    <Panel defaultSize={65}>
+                      <div className="h-full flex flex-col">
+                        <div className="flex items-center border-b border-border bg-muted/30 shrink-0">
+                          <button
+                            onClick={() => handleTabChange('code')}
+                            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                              activeTab === 'code'
+                                ? 'border-primary text-primary bg-background'
+                                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <Code className="w-4 h-4" />
+                            Source Code
+                          </button>
+                          <button
+                            onClick={() => handleTabChange('output')}
+                            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 relative ${
+                              activeTab === 'output'
+                                ? 'border-primary text-primary bg-background'
+                                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <Monitor className="w-4 h-4" />
+                            Output
+                            {hasNewEvent && activeTab !== 'output' && (
+                              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
+                            )}
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-hidden relative">
+                          <div className={`absolute inset-0 ${activeTab === 'code' ? '' : 'invisible'}`}>
+                            <EditorPanel onContentChange={handleEditorChange} />
+                          </div>
+                          <div className={`absolute inset-0 ${activeTab === 'output' ? '' : 'invisible'}`}>
+                            <OutputPanel
+                              displayMessages={displayMessages}
+                              adventureState={adventureState}
+                              hasAdventureContent={hasAdventureContent}
+                              isImmersive={isOutputImmersive}
+                              onToggleImmersive={handleToggleImmersive}
+                              onInput={sendInput}
+                              onClear={resetDisplay}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <PanelResizeHandle className={`h-1 bg-border hover:bg-primary/50 transition-colors ${isOutputImmersive && activeTab === 'output' ? 'hidden' : ''}`} />
+
+                    <Panel
+                      ref={terminalPanelRef}
+                      defaultSize={35}
+                      minSize={15}
+                      collapsible
+                      collapsedSize={0}
+                      className={`${isOutputFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}
+                    >
+                      <div className="h-full flex flex-col bg-card border-t border-border">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                          <span className="text-sm font-medium text-muted-foreground">
+                            Terminal {isRunning && <span className="text-green-500 animate-pulse">● Running</span>}
+                          </span>
+                          <Button variant="ghost" size="icon" onClick={() => setFullscreen(!isOutputFullscreen)} className="w-6 h-6">
+                            {isOutputFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                        <div className="flex-1 overflow-hidden bg-[#0f172a]">
+                          <Terminal
+                            terminalRef={terminalRef}
+                            onInput={sendInput}
+                          />
+                        </div>
+                        <div className="h-3 bg-card shrink-0" />
+                      </div>
+                    </Panel>
+                  </PanelGroup>
+                </Panel>
+              </PanelGroup>
+            </div>
+            {isAiEnabled && isAiChatOpen && showChatPanel && (
+              <div className="flex shrink-0">
+                <div
+                  className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize shrink-0"
+                  onMouseDown={handleAiPanelResizeStart}
+                />
+                <div style={{ width: aiPanelWidth }} className="overflow-hidden">
+                  <AiPanel />
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
