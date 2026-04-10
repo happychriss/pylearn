@@ -60,6 +60,18 @@ export default function StudentWorkspace() {
     }
     wasRunningRef.current = isRunning;
   }, [isRunning, clearQuestion]);
+
+  // Auto-switch to output tab on first display event after Run is pressed
+  const autoSwitchRef = useRef(false);
+  useEffect(() => {
+    if (!autoSwitchRef.current || !hasDisplayContent) return;
+    autoSwitchRef.current = false;
+    clearNewEvent();
+    setActiveTab('output');
+    setDisplayActiveTab('output');
+    if (hasAdventureContent) setOutputImmersive(true);
+    terminalPanelRef.current?.collapse();
+  }, [hasDisplayContent]); // eslint-disable-line react-hooks/exhaustive-deps
   const [teacherViewing, setTeacherViewing] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
@@ -227,6 +239,7 @@ export default function StudentWorkspace() {
     if (!content) return;
     terminalRef.current?.clear();
     resetDisplay();
+    autoSwitchRef.current = true;
     runCode(content);
   };
 
@@ -272,6 +285,11 @@ export default function StudentWorkspace() {
               <WifiOff size={14} className="text-red-400 animate-pulse" title="Connecting…" />
             )}
           </div>
+          {aiConfig?.mode && (
+            <div className="px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
+              {aiConfig.mode === 'chat' ? 'Chat Mode' : aiConfig.mode === 'agent' ? 'Agent Mode' : 'Suggest Mode'}
+            </div>
+          )}
           {teacherViewing && (
             <div className="px-3 py-1 rounded-full bg-accent/20 text-accent-foreground text-xs font-bold flex items-center gap-2 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-accent" />
@@ -483,7 +501,7 @@ export default function StudentWorkspace() {
                   onMouseDown={handleAiPanelResizeStart}
                 />
                 <div style={{ width: aiPanelWidth }} className="overflow-hidden">
-                  <AiPanel />
+                  <AiPanel credits={aiCredits ?? 0} onCreditUsed={() => refetchProfile()} />
                 </div>
               </div>
             )}

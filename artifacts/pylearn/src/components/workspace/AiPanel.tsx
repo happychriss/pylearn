@@ -9,9 +9,15 @@ import { useAcceptSuggestion, useRejectSuggestion } from '@workspace/api-client-
 import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export function AiPanel() {
+interface AiPanelProps {
+  credits: number;
+  onCreditUsed?: () => void;
+}
+
+export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
   const [input, setInput] = useState('');
   const { messages, sendMessage, isStreaming, removeSuggestion } = useChatStream();
+  const noCredits = credits <= 0;
   const { activeFileId, openFiles, unsavedChanges, updateUnsavedContent } = useWorkspaceStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const acceptSuggestion = useAcceptSuggestion();
@@ -28,10 +34,10 @@ export function AiPanel() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isStreaming) return;
-    
+    if (!input.trim() || isStreaming || noCredits) return;
     sendMessage(input, currentCode, activeFile?.filename);
     setInput('');
+    onCreditUsed?.();
   };
 
   const handleAccept = (messageId: string, suggestion: ParsedSuggestion) => {
@@ -60,9 +66,14 @@ export function AiPanel() {
 
   return (
     <div className="h-full flex flex-col bg-card border-l border-border">
-      <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
-        <Sparkles className="w-5 h-5 text-accent" />
-        <h2 className="font-display font-semibold text-foreground">AI Assistant</h2>
+      <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-accent" />
+          <h2 className="font-display font-semibold text-foreground">AI Assistant</h2>
+        </div>
+        {noCredits
+          ? <span className="text-xs text-destructive font-medium">No credits</span>
+          : <span className="text-xs text-muted-foreground">{credits} credit{credits !== 1 ? 's' : ''}</span>}
       </div>
 
       <div className="flex-1 overflow-hidden relative">
@@ -128,18 +139,21 @@ export function AiPanel() {
       </div>
 
       <div className="p-3 bg-background border-t border-border">
+        {noCredits && (
+          <p className="text-xs text-destructive text-center mb-2">No credits remaining — contact your teacher</p>
+        )}
         <form onSubmit={handleSend} className="relative flex items-center">
-          <Input 
+          <Input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask a question..."
+            placeholder={noCredits ? "No credits remaining" : "Ask a question..."}
             className="pr-12 rounded-xl border-2 focus-visible:ring-primary/20"
-            disabled={isStreaming}
+            disabled={isStreaming || noCredits}
           />
-          <Button 
-            size="icon" 
-            type="submit" 
-            disabled={!input.trim() || isStreaming}
+          <Button
+            size="icon"
+            type="submit"
+            disabled={!input.trim() || isStreaming || noCredits}
             className="absolute right-1 w-8 h-8 rounded-lg bg-primary hover:bg-primary/90"
           >
             <Send className="w-4 h-4" />

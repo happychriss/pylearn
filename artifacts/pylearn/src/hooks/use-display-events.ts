@@ -26,12 +26,19 @@ export interface TextState {
   background: string | null;
 }
 
+export interface AdventureMessage {
+  text: string;
+  color?: string;
+  size?: number;
+  background?: string;
+}
+
 export interface AdventureState {
   background: string | null;
   sprites: Record<string, SpriteState>;
   texts: Record<string, TextState>;
-  messages: string[];
-  question: string | null;
+  messages: AdventureMessage[];
+  question: AdventureMessage | null;
   generation: number; // increments on every resetState — forces SpriteElement remount
 }
 
@@ -78,9 +85,9 @@ export function useDisplayEvents(filterUserId?: string) {
             setAdventureState((prev) => ({
               ...prev,
               background: data.name as string,
-              texts: {},
               messages: [],
               question: null,
+              // texts intentionally preserved — HUD labels (score, etc.) survive scene transitions
             }));
             break;
           case 'show':
@@ -118,13 +125,23 @@ export function useDisplayEvents(filterUserId?: string) {
           case 'say':
             setAdventureState((prev) => ({
               ...prev,
-              messages: [...prev.messages, data.text as string],
+              messages: [...prev.messages, {
+                text: data.text as string,
+                color: data.color as string | undefined,
+                size: data.size as number | undefined,
+                background: data.background as string | undefined,
+              }],
             }));
             break;
           case 'ask':
             setAdventureState((prev) => ({
               ...prev,
-              question: data.prompt as string,
+              question: {
+                text: data.prompt as string,
+                color: data.color as string | undefined,
+                size: data.size as number | undefined,
+                background: data.background as string | undefined,
+              },
             }));
             break;
           case 'show_text': {

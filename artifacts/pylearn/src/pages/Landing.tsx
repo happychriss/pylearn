@@ -120,10 +120,7 @@ export default function Landing() {
 
   const handleStudentLogin = async () => {
     setStudentError('');
-    if (!studentName.trim() || pin.length !== 6) {
-      setStudentError('Please enter your name and 6-digit PIN');
-      return;
-    }
+    if (!studentName.trim() || pin.length !== 6) return;
     setStudentLoading(true);
     try {
       const res = await fetch('/api/auth/student-login', {
@@ -206,7 +203,7 @@ export default function Landing() {
                 )}
                 <Button
                   onClick={handleStudentLogin}
-                  disabled={studentLoading}
+                  disabled={studentLoading || !studentName.trim() || pin.length !== 6}
                   className="w-full h-12 rounded-2xl bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl transition-all"
                 >
                   {studentLoading ? 'Logging in...' : 'Enter Classroom'}

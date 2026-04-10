@@ -124,7 +124,11 @@ clear_text("score")        # remove one label by name
 clear_text()               # remove all labels
 
 say("Story text shown in the scene overlay.")
+say("Bold warning!", color="yellow", size=22)
+say("Highlighted message", color="white", size=18, background="#cc0000")
+
 answer = ask("A question the player types an answer to?")
+answer = ask("Your name?", color="cyan", size=20)
 \`\`\`
 
 Sprites: upload a PNG/JPG image named e.g. \`hero.png\` via the Images panel, then

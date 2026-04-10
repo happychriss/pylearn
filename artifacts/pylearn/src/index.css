@@ -141,8 +141,8 @@
 
 /* Adventure Panel — new message flash */
 @keyframes adventure-msg-bold {
-  0%, 65% { font-weight: 700; color: rgba(255,255,255,0.98); }
-  100%     { font-weight: 400; color: rgba(255,255,255,0.9); }
+  0%, 65% { font-weight: 700; }
+  100%     { font-weight: 400; }
 }
 .adventure-msg-new {
   animation: adventure-msg-bold 1.6s ease forwards;

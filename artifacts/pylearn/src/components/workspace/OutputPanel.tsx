@@ -497,8 +497,15 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
               {adventureState.messages.map((msg, i) => (
                 <p
                   key={i}
-                  className={`text-sm leading-relaxed${i > 0 ? ' mt-1.5' : ''}${newMsgIndices.has(i) ? ' adventure-msg-new' : ' text-white/90'}`}
-                >{msg}</p>
+                  className={`leading-relaxed${i > 0 ? ' mt-1.5' : ''}${newMsgIndices.has(i) ? ' adventure-msg-new' : ''}`}
+                  style={{
+                    fontSize: msg.size ? `${msg.size}px` : '1rem',
+                    color: msg.color ?? 'rgba(255,255,255,0.9)',
+                    background: msg.background ?? undefined,
+                    padding: msg.background ? '2px 6px' : undefined,
+                    borderRadius: msg.background ? '4px' : undefined,
+                  }}
+                >{msg.text}</p>
               ))}
               <div ref={messagesEndRef} />
             </div>
@@ -506,8 +513,17 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
 
           {adventureState.question && (
             <div className="rounded-xl px-4 py-3"
-              style={{ background: 'rgba(30, 60, 100, 0.60)', backdropFilter: 'blur(12px)', border: '1px solid rgba(100,160,255,0.2)' }}>
-              <p className="text-sm text-blue-100 leading-relaxed">{adventureState.question}</p>
+              style={{
+                background: adventureState.question.background ?? 'rgba(30, 60, 100, 0.60)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(100,160,255,0.2)',
+              }}>
+              <p className="leading-relaxed"
+                style={{
+                  fontSize: adventureState.question.size ? `${adventureState.question.size}px` : '1rem',
+                  color: adventureState.question.color ?? '#bfdbfe',
+                }}
+              >{adventureState.question.text}</p>
             </div>
           )}
 

@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useCreateFile, useDeleteFile } from '@workspace/api-client-react';
-import { FileCode, Plus, Trash2, File as FileIcon, Image, Upload, MessageCircle } from 'lucide-react';
+import { FileCode, Plus, Trash2, File as FileIcon, Image, Upload, MessageCircle, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '../ui/dialog';
 import { toast } from '@/hooks/use-toast';
 
 interface UploadedImage {
@@ -23,7 +23,27 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
   const createFile = useCreateFile();
   const deleteFile = useDeleteFile();
   const [newFilename, setNewFilename] = useState('');
+  const [createError, setCreateError] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
+  const [creatingFile, setCreatingFile] = useState(false);
+  const [pendingFilename, setPendingFilename] = useState<string | null>(null);
+
+  // Clear create spinner once the new file actually appears in the file list
+  useEffect(() => {
+    if (pendingFilename && openFiles.some(f => f.filename === pendingFilename)) {
+      setCreatingFile(false);
+      setPendingFilename(null);
+    }
+  }, [openFiles, pendingFilename]);
+
+  // Clear delete spinner once the file actually disappears from the file list
+  useEffect(() => {
+    if (deletingFileId !== null && !openFiles.some(f => f.id === deletingFileId)) {
+      setDeletingFileId(null);
+    }
+  }, [openFiles, deletingFileId]);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; filename: string } | null>(null);
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -74,13 +94,23 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
   const handleCreate = async () => {
     if (!newFilename) return;
     const name = newFilename.endsWith('.py') ? newFilename : `${newFilename}.py`;
-    
+
+    if (openFiles.some(f => f.filename === name)) {
+      setCreateError(`"${name}" already exists`);
+      return;
+    }
+    // Close dialog immediately — spinner row stays until file appears in list
+    setIsDialogOpen(false);
+    setNewFilename('');
+    setCreateError('');
+    setCreatingFile(true);
+    setPendingFilename(name);
     createFile.mutate({ data: { filename: name, content: '# Write your code here\n' } }, {
       onSuccess: (file) => {
-        setIsDialogOpen(false);
-        setNewFilename('');
         setActiveFile(file.id);
-      }
+        // creatingFile cleared by useEffect when openFiles updates
+      },
+      onError: () => { setCreatingFile(false); setPendingFilename(null); },
     });
   };
 
@@ -90,7 +120,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
         <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">
           {aiMode === 'chat' ? 'Prompts' : 'Files'}
         </h2>
-        {aiMode !== 'chat' && <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        {aiMode !== 'chat' && <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setNewFilename(''); setCreateError(''); } }}>
           <DialogTrigger asChild>
             <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-sidebar-accent">
               <Plus className="w-4 h-4" />
@@ -101,16 +131,19 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
               <DialogTitle>Create New File</DialogTitle>
             </DialogHeader>
             <div className="flex gap-2 mt-4">
-              <Input 
-                value={newFilename} 
-                onChange={e => setNewFilename(e.target.value)} 
+              <Input
+                value={newFilename}
+                onChange={e => { setNewFilename(e.target.value); setCreateError(''); }}
                 placeholder="filename.py"
                 onKeyDown={e => e.key === 'Enter' && handleCreate()}
               />
               <Button onClick={handleCreate} disabled={createFile.isPending}>
-                {createFile.isPending ? "Creating..." : "Create"}
+                {createFile.isPending
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Creating…</>
+                  : "Create"}
               </Button>
             </div>
+            {createError && <p className="text-sm text-destructive mt-1">{createError}</p>}
           </DialogContent>
         </Dialog>}
       </div>
@@ -122,7 +155,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
             isChatMode ? f.filename.endsWith('.prompt') : !f.filename.endsWith('.prompt')
           );
 
-          if (filteredFiles.length === 0) {
+          if (filteredFiles.length === 0 && !creatingFile) {
             return (
               <div className="text-center p-4 text-sm text-muted-foreground flex flex-col items-center">
                 {isChatMode ? (
@@ -141,7 +174,14 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
             );
           }
 
-          return filteredFiles.map(file => {
+          return <>
+            {creatingFile && !isChatMode && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                <span className="truncate text-sm italic">Creating…</span>
+              </div>
+            )}
+            {filteredFiles.map(file => {
             const isDirty = unsavedChanges[file.id] !== undefined;
             const isActive = activeFileId === file.id;
             const isPrompt = file.filename.endsWith('.prompt');
@@ -176,25 +216,56 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`w-6 h-6 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive ${isActive ? 'text-primary' : ''}`}
+                  className={`w-6 h-6 hover:bg-destructive/10 hover:text-destructive ${deletingFileId === file.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} ${isActive ? 'text-primary' : ''}`}
+                  disabled={deletingFileId === file.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`Delete ${file.filename}?`)) {
-                      deleteFile.mutate({ id: file.id }, {
-                        onSuccess: () => {
-                          if (activeFileId === file.id) setActiveFile(null);
-                        }
-                      });
-                    }
+                    setDeleteTarget({ id: file.id, filename: file.filename });
                   }}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  {deletingFileId === file.id
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Trash2 className="w-3.5 h-3.5" />}
                 </Button>
               </div>
             );
-          });
+            })}
+          </>;
         })()}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete file</DialogTitle>
+            <DialogDescription>
+              Delete <span className="font-mono font-medium">{deleteTarget?.filename}</span>? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deletingFileId === deleteTarget?.id}
+              onClick={() => {
+                if (!deleteTarget) return;
+                setDeletingFileId(deleteTarget.id);
+                setDeleteTarget(null);
+                deleteFile.mutate({ id: deleteTarget.id }, {
+                  onSuccess: () => {
+                    if (activeFileId === deleteTarget.id) setActiveFile(null);
+                    // deletingFileId cleared by useEffect when file leaves openFiles
+                  },
+                  onError: () => setDeletingFileId(null),
+                });
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Images section — hidden in chat mode */}
       {aiMode !== 'chat' && <div className="border-t border-border shrink-0">
