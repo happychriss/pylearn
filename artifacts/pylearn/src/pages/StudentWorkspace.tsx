@@ -49,8 +49,17 @@ export default function StudentWorkspace() {
   const { isRunning, runCode, sendInput, stopCode, listen } = usePtySession();
   const {
     displayMessages, adventureState, hasNewEvent, hasDisplayContent, hasAdventureContent,
-    clearNewEvent, resetState: resetDisplay, setActiveTab: setDisplayActiveTab,
+    clearNewEvent, clearQuestion, resetState: resetDisplay, setActiveTab: setDisplayActiveTab,
   } = useDisplayEvents();
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    if (wasRunningRef.current && !isRunning) {
+      // Program just terminated — dismiss any pending ask() prompt so the input
+      // field disappears. Keep everything else (scene, sprites, messages) visible.
+      clearQuestion();
+    }
+    wasRunningRef.current = isRunning;
+  }, [isRunning, clearQuestion]);
   const [teacherViewing, setTeacherViewing] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
@@ -409,6 +418,7 @@ export default function StudentWorkspace() {
                           >
                             <Monitor className="w-4 h-4" />
                             Output
+                            {isRunning && <span className="text-green-500 animate-pulse">●</span>}
                             {hasNewEvent && activeTab !== 'output' && (
                               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
                             )}
@@ -423,6 +433,7 @@ export default function StudentWorkspace() {
                               displayMessages={displayMessages}
                               adventureState={adventureState}
                               hasAdventureContent={hasAdventureContent}
+                              isRunning={isRunning}
                               isImmersive={isOutputImmersive}
                               onToggleImmersive={handleToggleImmersive}
                               onInput={sendInput}

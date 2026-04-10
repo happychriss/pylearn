@@ -12,20 +12,36 @@ export interface SpriteState {
   x: number;
   y: number;
   duration?: number; // seconds — only set on move events, cleared on show
+  size?: number;     // virtual units (0–500); undefined = default
+  fromX?: number;   // previous x before a move — drives CSS transition
+  fromY?: number;   // previous y before a move — drives CSS transition
+}
+
+export interface TextState {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  background: string | null;
 }
 
 export interface AdventureState {
   background: string | null;
   sprites: Record<string, SpriteState>;
+  texts: Record<string, TextState>;
   messages: string[];
   question: string | null;
+  generation: number; // increments on every resetState — forces SpriteElement remount
 }
 
 const INITIAL_ADVENTURE: AdventureState = {
   background: null,
   sprites: {},
+  texts: {},
   messages: [],
   question: null,
+  generation: 0,
 };
 
 export function useDisplayEvents(filterUserId?: string) {
@@ -62,6 +78,7 @@ export function useDisplayEvents(filterUserId?: string) {
             setAdventureState((prev) => ({
               ...prev,
               background: data.name as string,
+              texts: {},
               messages: [],
               question: null,
             }));
@@ -71,22 +88,32 @@ export function useDisplayEvents(filterUserId?: string) {
               ...prev,
               sprites: {
                 ...prev.sprites,
-                [data.sprite as string]: { x: data.x as number, y: data.y as number },
+                [data.sprite as string]: {
+                  x: data.x as number,
+                  y: data.y as number,
+                  size: data.size as number | undefined,
+                },
               },
             }));
             break;
           case 'move':
-            setAdventureState((prev) => ({
-              ...prev,
-              sprites: {
-                ...prev.sprites,
-                [data.sprite as string]: {
-                  x: data.x as number,
-                  y: data.y as number,
-                  duration: (data.duration as number) || 0,
+            setAdventureState((prev) => {
+              const existing = prev.sprites[data.sprite as string];
+              return {
+                ...prev,
+                sprites: {
+                  ...prev.sprites,
+                  [data.sprite as string]: {
+                    x: data.x as number,
+                    y: data.y as number,
+                    duration: (data.duration as number) || 0,
+                    size: existing?.size,
+                    fromX: existing?.x,
+                    fromY: existing?.y,
+                  },
                 },
-              },
-            }));
+              };
+            });
             break;
           case 'say':
             setAdventureState((prev) => ({
@@ -100,6 +127,34 @@ export function useDisplayEvents(filterUserId?: string) {
               question: data.prompt as string,
             }));
             break;
+          case 'show_text': {
+            const name = data.name as string;
+            setAdventureState((prev) => {
+              const existing = prev.texts[name];
+              const merged: TextState = {
+                text: data.text as string,
+                x: (data.x as number | undefined) ?? existing?.x ?? 0,
+                y: (data.y as number | undefined) ?? existing?.y ?? 0,
+                size: (data.size as number | undefined) ?? existing?.size ?? 20,
+                color: (data.color as string | undefined) ?? existing?.color ?? 'white',
+                background: data.background !== undefined
+                  ? (data.background as string | null)
+                  : (existing?.background ?? null),
+              };
+              return { ...prev, texts: { ...prev.texts, [name]: merged } };
+            });
+            break;
+          }
+          case 'clear_text': {
+            const name = data.name as string | undefined;
+            setAdventureState((prev) => {
+              if (!name) return { ...prev, texts: {} };
+              const next = { ...prev.texts };
+              delete next[name];
+              return { ...prev, texts: next };
+            });
+            break;
+          }
         }
         return; // Scene events don't go to display message list
       }
@@ -130,14 +185,24 @@ export function useDisplayEvents(filterUserId?: string) {
     setHasNewEvent(false);
   }, []);
 
+  // Called on program exit: clears only the active question so the input field
+  // disappears, but keeps the rest of the scene (background, sprites, messages) visible.
+  const clearQuestion = useCallback(() => {
+    setAdventureState(prev => ({ ...prev, question: null }));
+  }, []);
+
+  const generationRef = useRef(0);
   const resetState = useCallback(() => {
+    generationRef.current += 1;
+    const gen = generationRef.current;
     setDisplayMessages([]);
-    setAdventureState(INITIAL_ADVENTURE);
+    setAdventureState({ ...INITIAL_ADVENTURE, generation: gen });
   }, []);
 
   const hasAdventureContent = !!(
     adventureState.background ||
     Object.keys(adventureState.sprites).length > 0 ||
+    Object.keys(adventureState.texts).length > 0 ||
     adventureState.messages.length > 0 ||
     adventureState.question
   );
@@ -151,6 +216,7 @@ export function useDisplayEvents(filterUserId?: string) {
     hasDisplayContent,
     hasAdventureContent,
     clearNewEvent,
+    clearQuestion,
     resetState,
     setActiveTab,
   };

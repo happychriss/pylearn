@@ -53,49 +53,75 @@ Supported Plotly trace types via raw JSON: bar, scatter, pie, histogram, box, an
 
 ## Turtle Graphics
 
+NOTE: Turtle and Adventure Scenes cannot be used in the same program — they use separate renderers.
+
 \`\`\`python
 t = pylearn.Turtle(width=600, height=400)  # canvas size (default 600×400)
 
 # Movement
-t.forward(distance)       # move forward (pixels)
-t.backward(distance)      # move backward
-t.right(angle)            # turn right (degrees)
-t.left(angle)             # turn left (degrees)
+t.forward(distance)       # move forward (pixels) — alias: t.fd(distance)
+t.backward(distance)      # move backward        — alias: t.bk(distance)
+t.right(angle)            # turn right (degrees)  — alias: t.rt(angle)
+t.left(angle)             # turn left (degrees)   — alias: t.lt(angle)
+t.setheading(angle)       # set absolute heading (0=right, 90=down, 180=left, 270=up) — alias: t.seth(angle)
 t.goto(x, y)              # jump to absolute position
 
 # Pen control
-t.penup()                 # lift pen — move without drawing
-t.pendown()               # lower pen — draw as you move
+t.penup()                 # lift pen — move without drawing  — alias: t.pu()
+t.pendown()               # lower pen — draw as you move     — alias: t.pd()
 t.pensize(width)          # line width in pixels (default 2)
 t.pencolor("#ff0000")     # pen color — hex or name
-t.fillcolor("#00ff00")    # fill color for shapes
-t.color("#ff0000")        # set pen color (also: t.color(pen, fill))
+t.fillcolor("#00ff00")    # fill color used by begin_fill/end_fill
+t.color("#ff0000")              # set pen color only
+t.color("#ff0000", "#00ff00")   # set pen + fill color
 t.bgcolor("#0f172a")      # canvas background color
 
 # Shapes
-t.dot(size=5, color=None) # filled dot at current position
-t.circle(radius)          # draw a circle (can be negative to go the other way)
+t.dot(size=5, color=None)       # filled dot at current position
+t.circle(radius)                # full circle
+t.circle(radius, extent=120)    # arc — extent is the angle swept in degrees (120 = one-third circle)
 t.write("hello", font_size=16)  # text at current position
 
+# Fill — use begin_fill / end_fill to fill any closed shape
+t.fillcolor("yellow")
+t.begin_fill()
+t.circle(100)       # draw the shape
+t.end_fill()        # fills the enclosed area with fillcolor
+
 # State
-t.position()              # returns (x, y)
+t.position()              # returns (x, y)  — alias: t.pos()
 t.heading()               # returns current angle in degrees
 t.clear()                 # erase all drawn commands
 t.done()                  # ← REQUIRED: sends the drawing to the Output Panel
 \`\`\`
 
+IMPORTANT — only use the methods listed above. Do NOT use: speed(), stamp(), pencolor() with two args, xcor(), ycor(), towards(), distance(), undo(), tracer(), hideturtle(), showturtle(), shape(), screen(), Screen(), turtlesize(), shapesize(), or any other standard Python turtle module method not listed here.
+
 ---
 
 ## Adventure Scenes
 
+NOTE: Adventure Scenes and Turtle cannot be used in the same program — they use separate renderers.
+
 \`\`\`python
-from pylearn import scene, say, ask, show_sprite, move_sprite
+from pylearn import scene, say, ask, show_sprite, move_sprite, show_text, clear_text
 
 scene("forest")            # set background — built-in names: forest, cave, village, dungeon
                            # custom: upload an image file (without extension) in the Images panel
 
-show_sprite("hero", x=50, y=80)   # place a sprite (x/y = pixels from top-left)
-move_sprite("hero", x=200, y=80)  # move an existing sprite to a new position
+# Sprites — coordinates are in virtual 0–500 space (top-left origin), scaled to panel size
+show_sprite("hero", x=50, y=80)            # place a sprite
+show_sprite("hero", x=50, y=80, size=120)  # override sprite width (aspect ratio preserved)
+move_sprite("hero", x=200, y=80)           # instant move
+move_sprite("hero", x=200, y=80, duration=0.5)  # animated move over 0.5 seconds
+
+# Text labels (HUD / score / overlay) — same 0–500 coordinate space
+show_text("score", "Score: 10", x=10, y=10)             # place or update a label (x,y optional: kept from prev call)
+show_text("score", "Score: 99")                          # update text only — x/y/size/color preserved
+show_text("score", "Score: 10", x=10, y=10, size=28, color="yellow")  # with style
+show_text("score", "Score: 10", x=10, y=10, background="#000000")     # opaque background
+clear_text("score")        # remove one label by name
+clear_text()               # remove all labels
 
 say("Story text shown in the scene overlay.")
 answer = ask("A question the player types an answer to?")

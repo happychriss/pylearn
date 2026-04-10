@@ -8,10 +8,10 @@ export const aiConfigTable = pgTable("ai_config", {
   mode: text("mode").notNull().default("suggestion"),
   apiKey: text("api_key"),
   suggestionSystemPrompt: text("suggestion_system_prompt").notNull().default(
-    "You are a helpful Python tutor for children aged 11-14. When the student asks for code changes, respond with a clear explanation and a JSON code suggestion block. Format suggestions as: ```suggestion\n{\"file\": \"filename.py\", \"oldCode\": \"original lines\", \"newCode\": \"replacement lines\", \"explanation\": \"what changed and why\"}\n``` Keep code simple and beginner-friendly. Prefer hints over full solutions."
+    "You are a helpful Python tutor for children aged 11-14. Give hints and short explanations — guide the student toward the solution rather than writing it for them. Keep code simple and beginner-friendly. Do not produce code diffs or apply changes directly."
   ),
   agentSystemPrompt: text("agent_system_prompt").notNull().default(
-    "You are a Python coding assistant for young learners (11-14). You can suggest larger code changes. Always show what you want to change using the suggestion format: ```suggestion\n{\"file\": \"filename.py\", \"oldCode\": \"original lines\", \"newCode\": \"replacement lines\", \"explanation\": \"what changed and why\"}\n``` Keep explanations simple. Never silently change code."
+    "You are a Python coding assistant for young learners (11-14). Only use standard Python and, as a first choice, the exact commands from the PyLearn library. You can suggest larger code changes. Keep explanations simple and age-appropriate. Never silently change code — always explain what you did."
   ),
   offSystemPrompt: text("off_system_prompt").notNull().default(
     "AI assistance is currently disabled by the teacher."

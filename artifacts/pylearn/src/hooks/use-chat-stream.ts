@@ -3,8 +3,6 @@ import { ChatMessage } from '@workspace/api-client-react';
 
 export interface ParsedSuggestion {
   file: string;
-  lineStart?: number;
-  lineEnd?: number;
   newContent: string;
   explanation: string;
 }
@@ -21,7 +19,7 @@ interface SseTextEvent {
 
 interface SseSuggestionEvent {
   type: 'suggestion';
-  suggestion: ParsedSuggestion;
+  suggestion: ParsedSuggestion | null;  // null = validation failed, show cleanText only
   cleanText: string;
 }
 
@@ -91,8 +89,8 @@ export function useChatStream() {
               setMessages(prev => 
                 prev.map(m => m.id === astMsgId ? { 
                   ...m, 
-                  content: event.cleanText || fullContent,
-                  suggestion: event.suggestion 
+                  content: event.cleanText ?? fullContent,
+                  suggestion: event.suggestion ?? undefined
                 } : m)
               );
             }

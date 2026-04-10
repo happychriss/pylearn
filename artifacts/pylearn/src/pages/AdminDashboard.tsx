@@ -908,8 +908,8 @@ export default function AdminDashboard() {
                         <SelectTrigger><SelectValue/></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="off">OFF (Disabled)</SelectItem>
-                          <SelectItem value="suggestion">SUGGESTION (Code Diffs)</SelectItem>
-                          <SelectItem value="agent">AGENT (Conversational)</SelectItem>
+                          <SelectItem value="suggestion">SUGGESTION (Hints &amp; Explanations)</SelectItem>
+                          <SelectItem value="agent">AGENT (Code Changes + Diffs)</SelectItem>
                           <SelectItem value="chat">CHAT (Full-Screen AI Chat)</SelectItem>
                         </SelectContent>
                       </Select>

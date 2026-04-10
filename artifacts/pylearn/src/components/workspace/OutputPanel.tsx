@@ -3,7 +3,7 @@ import Plotly from 'plotly.js-basic-dist-min';
 import { useAuth } from '@workspace/auth-web';
 import { Image, Maximize2, Minimize2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { DisplayMessage, AdventureState } from '@/hooks/use-display-events';
+import type { DisplayMessage, AdventureState, SpriteState } from '@/hooks/use-display-events';
 
 // ---------------------------------------------------------------------------
 // Renderer Registry
@@ -90,6 +90,19 @@ function CanvasRenderer({ data }: RendererProps) {
             ctx.strokeStyle = cmd.color as string || '#000';
             ctx.lineWidth = cmd.width as number || 2;
             ctx.stroke();
+          }
+          break;
+        }
+
+        case 'polygon': {
+          const pts = cmd.points as Array<{ x: number; y: number }>;
+          if (pts && pts.length > 2) {
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+            ctx.closePath();
+            ctx.fillStyle = cmd.color as string || '#000';
+            ctx.fill();
           }
           break;
         }
@@ -227,12 +240,119 @@ interface SceneRendererProps {
   onInput?: (data: string) => void;
 }
 
+const VIRTUAL_SIZE = 500;
+const DEFAULT_SPRITE_SIZE = 80;
+
+// ---------------------------------------------------------------------------
+// Sprite Element — handles CSS transition with two-phase mount
+// ---------------------------------------------------------------------------
+
+interface SpriteElementProps {
+  name: string;
+  pos: SpriteState;
+  sx: (v: number) => number; // used for image sizing only
+  effectiveUserId: string | undefined;
+  images: UploadedImage[];
+}
+
+function SpriteElement({ name, pos, sx, effectiveUserId, images }: SpriteElementProps) {
+  // Mount at fromX/fromY so the browser paints the start position before the transition fires.
+  // If there's no fromX/fromY (show event), just render at x/y with no animation.
+  const [renderX, setRenderX] = useState(pos.fromX ?? pos.x);
+  const [renderY, setRenderY] = useState(pos.fromY ?? pos.y);
+  const [transition, setTransition] = useState<string | undefined>(undefined);
+  const transitionClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (transitionClearRef.current) clearTimeout(transitionClearRef.current);
+
+    if (pos.fromX !== undefined && pos.fromY !== undefined) {
+      // Phase 1: ensure element is at the from-position (already true on first mount; needed for
+      // subsequent moves when the element may have drifted). React bails out if values unchanged.
+      setRenderX(pos.fromX);
+      setRenderY(pos.fromY);
+      setTransition(undefined);
+      // Phase 2: next animation frame — browser has painted at fromX/fromY, so CSS transition works
+      const raf = requestAnimationFrame(() => {
+        setRenderX(pos.x);
+        setRenderY(pos.y);
+        if (pos.duration) {
+          setTransition(`left ${pos.duration}s ease-in-out, top ${pos.duration}s ease-in-out`);
+          // Clear transition after animation completes so container resizes don't re-trigger it
+          transitionClearRef.current = setTimeout(
+            () => setTransition(undefined),
+            pos.duration * 1000 + 100,
+          );
+        }
+      });
+      return () => {
+        cancelAnimationFrame(raf);
+        if (transitionClearRef.current) clearTimeout(transitionClearRef.current);
+      };
+    } else {
+      // show event — immediate placement, no animation
+      setRenderX(pos.x);
+      setRenderY(pos.y);
+      setTransition(undefined);
+    }
+  }, [pos.x, pos.y, pos.fromX, pos.fromY, pos.duration]);
+
+  const nameLower = name.toLowerCase();
+  const uploadedSprite = images.find((img) => {
+    const filenameLower = img.filename.toLowerCase();
+    const nameWithoutExt = filenameLower.replace(/\.[^.]+$/, '');
+    return nameWithoutExt === nameLower || filenameLower === nameLower;
+  });
+
+  // Use percentage-based positioning so container resizes don't affect the active CSS transition.
+  // Pixel-based positions change when containerSize updates (ResizeObserver), which would
+  // re-trigger the transition and cause spurious y-direction animation.
+  const leftPct = `${(renderX / VIRTUAL_SIZE) * 100}%`;
+  const topPct  = `${(renderY / VIRTUAL_SIZE) * 100}%`;
+
+  return (
+    <div
+      className="absolute"
+      style={{ left: leftPct, top: topPct, transition }}
+    >
+      {uploadedSprite ? (
+        <img
+          src={`/api/adventure/uploads/${effectiveUserId}/${uploadedSprite.filename}`}
+          alt={name}
+          className="object-contain drop-shadow-lg"
+          style={{ maxWidth: sx(pos.size ?? DEFAULT_SPRITE_SIZE), maxHeight: sx(pos.size ?? DEFAULT_SPRITE_SIZE) }}
+        />
+      ) : (
+        <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm border border-white/30 shadow-lg">
+          {name}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleImmersive, onInput }: SceneRendererProps) {
   const { user } = useAuth();
   const effectiveUserId = overrideUserId || user?.id;
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [newMsgIndices, setNewMsgIndices] = useState<Set<number>>(new Set());
   const prevMsgCountRef = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: VIRTUAL_SIZE, height: VIRTUAL_SIZE });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setContainerSize({ width, height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const sx = (v: number) => (v / VIRTUAL_SIZE) * containerSize.width;
+  const sy = (v: number) => (v / VIRTUAL_SIZE) * containerSize.height;
 
   const fetchImages = async () => {
     try {
@@ -314,7 +434,7 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
   }, [onInput, inputValue]);
 
   return (
-    <div className="h-full relative overflow-hidden" style={getBackgroundStyle()}>
+    <div ref={containerRef} className="h-full relative overflow-hidden" style={getBackgroundStyle()}>
       {/* Background label */}
       {adventureState.background && (
         <div className="absolute top-3 left-3 z-10">
@@ -334,38 +454,39 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
         </div>
       )}
 
-      {/* Sprites */}
-      {Object.entries(adventureState.sprites).map(([name, pos]) => {
-        const nameLowerSprite = name.toLowerCase();
-        const uploadedSprite = images.find((img) => {
-          const filenameLower = img.filename.toLowerCase();
-          const nameWithoutExt = filenameLower.replace(/\.[^.]+$/, '');
-          return nameWithoutExt === nameLowerSprite || filenameLower === nameLowerSprite;
-        });
-        return (
-          <div
-            key={name}
-            className="absolute"
-            style={{
-              left: pos.x,
-              top: pos.y,
-              transition: pos.duration ? `left ${pos.duration}s ease-in-out, top ${pos.duration}s ease-in-out` : undefined,
-            }}
-          >
-            {uploadedSprite ? (
-              <img
-                src={`/api/adventure/uploads/${effectiveUserId}/${uploadedSprite.filename}`}
-                alt={name}
-                className="max-w-[120px] max-h-[120px] object-contain drop-shadow-lg"
-              />
-            ) : (
-              <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm border border-white/30 shadow-lg">
-                {name}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* Sprites — key includes generation so components remount on each new run */}
+      {Object.entries(adventureState.sprites).map(([name, pos]) => (
+        <SpriteElement
+          key={`${name}-${adventureState.generation}`}
+          name={name}
+          pos={pos}
+          sx={sx}
+          effectiveUserId={effectiveUserId}
+          images={images}
+        />
+      ))}
+
+      {/* Text labels */}
+      {Object.entries(adventureState.texts).map(([name, t]) => (
+        <div
+          key={name}
+          className="absolute"
+          style={{
+            left: sx(t.x),
+            top: sy(t.y),
+            fontSize: t.size,
+            color: t.color,
+            background: t.background ?? undefined,
+            padding: t.background ? '2px 8px' : undefined,
+            borderRadius: t.background ? 4 : undefined,
+            fontWeight: 'bold',
+            textShadow: t.background ? undefined : '0 1px 4px rgba(0,0,0,0.8)',
+            whiteSpace: 'pre',
+          }}
+        >
+          {t.text}
+        </div>
+      ))}
 
       {/* Story + Question + Input overlay */}
       {(adventureState.messages.length > 0 || adventureState.question || (isImmersive && adventureState.background)) && (
@@ -420,6 +541,7 @@ interface OutputPanelProps {
   displayMessages: DisplayMessage[];
   adventureState: AdventureState;
   hasAdventureContent: boolean;
+  isRunning?: boolean;
   overrideUserId?: string;
   isImmersive?: boolean;
   onToggleImmersive?: () => void;
@@ -431,6 +553,7 @@ export function OutputPanel({
   displayMessages,
   adventureState,
   hasAdventureContent,
+  isRunning,
   overrideUserId,
   isImmersive,
   onToggleImmersive,
@@ -482,16 +605,24 @@ export function OutputPanel({
   if (!hasContent) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center text-white/40 space-y-3">
-          <Image className="w-12 h-12 mx-auto opacity-40" />
-          <p className="text-base font-medium">Output</p>
-          <p className="text-sm max-w-xs">
-            Run your code to see charts, drawings, and rich output here.
-          </p>
-          <p className="text-xs text-white/25 mt-2">
-            <code className="bg-white/5 px-1.5 py-0.5 rounded">import pylearn</code>
-          </p>
-        </div>
+        {isRunning ? (
+          <div className="text-center text-white/40 space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-full border-2 border-white/20 border-t-green-400 animate-spin" />
+            <p className="text-base font-medium text-white/50">Running…</p>
+            <p className="text-sm max-w-xs">Output will appear here.</p>
+          </div>
+        ) : (
+          <div className="text-center text-muted-foreground space-y-3">
+            <Image className="w-12 h-12 mx-auto opacity-40" />
+            <p className="text-base font-medium">Output</p>
+            <p className="text-sm max-w-xs">
+              Run your code to see charts, drawings, and rich output here.
+            </p>
+            <p className="text-xs opacity-50 mt-2">
+              <code className="bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">import pylearn</code>
+            </p>
+          </div>
+        )}
       </div>
     );
   }

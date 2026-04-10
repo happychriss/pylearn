@@ -38,11 +38,11 @@ export function AiPanel() {
     if (!activeFileId) return;
     
     acceptSuggestion.mutate(
-      { data: { 
-        fileId: activeFileId, 
+      { data: {
+        fileId: activeFileId,
         newContent: suggestion.newContent,
-        lineStart: suggestion.lineStart ?? null,
-        lineEnd: suggestion.lineEnd ?? null,
+        lineStart: null,
+        lineEnd: null,
       } },
       {
         onSuccess: (updatedFile) => {

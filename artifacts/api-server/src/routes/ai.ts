@@ -37,60 +37,171 @@ router.get("/ai/student-config", async (req, res): Promise<void> => {
   res.json({ mode: config.mode });
 });
 
-const SUGGESTION_INSTRUCTION = `\n\nWhen you want to suggest a code change, you MUST end your response with a JSON block in exactly this format:
----SUGGESTION---
-{"file": "filename.py", "lineStart": 1, "lineEnd": 10, "newContent": "replacement lines here", "explanation": "brief explanation of what changed"}
----END_SUGGESTION---
-lineStart and lineEnd indicate the 1-based line range being replaced. newContent contains ONLY the replacement lines for that range (not the entire file). The server will splice newContent into the file, replacing lines lineStart through lineEnd inclusive.
-Only include this block when you have a concrete code change to propose. For explanations or questions, respond normally without the block.`;
+const SUGGESTION_INSTRUCTION = `
 
+---
+## Code Change Format (system — do not modify)
+
+When suggesting code changes, end your response with exactly this JSON block:
+
+---SUGGESTION---
+{
+  "explanation": "brief explanation of what changed",
+  "changes": [
+    { "old_text": "exact lines from the file", "new_text": "replacement lines" }
+  ]
+}
+---END_SUGGESTION---
+
+Rules:
+1. old_text must be copied EXACTLY from the current file — same indentation, spacing, and comments. The system finds your change by locating this exact text.
+2. old_text must be unique in the file. If it could match multiple places, include more surrounding lines to make it unambiguous.
+3. new_text is the full replacement for old_text. To insert a line, include the anchor line in old_text and the anchor plus the new line in new_text.
+4. Use multiple objects in the changes array for edits in separate locations (e.g. a new import AND a new statement).
+5. Do NOT show modified code in a \`\`\`python block — the suggestion block is the only place for code.
+6. Do NOT wrap the suggestion block in triple backticks. Use the literal ---SUGGESTION--- and ---END_SUGGESTION--- markers exactly as shown.
+7. Emit at most ONE suggestion block per response.
+8. For explanations with no code change, omit the block entirely.`;
+
+// What the AI returns
+interface RawChange {
+  old_text: string;
+  new_text: string;
+}
+
+interface RawSuggestionPayload {
+  explanation: string;
+  changes?: RawChange[];   // preferred format
+  newContent?: string;     // full-file fallback (still accepted)
+  file?: string;
+}
+
+// What we send to the client (unchanged — full computed newContent)
 interface SuggestionPayload {
   file: string;
-  lineStart?: number;
-  lineEnd?: number;
   newContent: string;
   explanation: string;
 }
 
-function extractSuggestion(fullText: string): { text: string; suggestion: SuggestionPayload | null } {
+/** Apply a list of old_text → new_text changes to fileContent.
+ *  Each old_text must match exactly once. Returns the patched content or an error. */
+function applyChanges(
+  fileContent: string,
+  changes: RawChange[],
+): { ok: true; result: string } | { ok: false; error: string } {
+  // Normalise line endings once up front
+  let content = fileContent.replace(/\r\n/g, '\n');
+
+  for (const change of changes) {
+    const oldText = change.old_text.replace(/\r\n/g, '\n');
+    const newText = change.new_text.replace(/\r\n/g, '\n');
+
+    const firstIdx = content.indexOf(oldText);
+    if (firstIdx === -1) {
+      const preview = oldText.split('\n')[0].trim().slice(0, 60);
+      return { ok: false, error: `Could not find: "${preview}"` };
+    }
+
+    const secondIdx = content.indexOf(oldText, firstIdx + 1);
+    if (secondIdx !== -1) {
+      const preview = oldText.split('\n')[0].trim().slice(0, 60);
+      return { ok: false, error: `Ambiguous match (appears more than once): "${preview}"` };
+    }
+
+    content = content.slice(0, firstIdx) + newText + content.slice(firstIdx + oldText.length);
+  }
+
+  return { ok: true, result: content };
+}
+
+/** Parse the AI response and resolve it to a final SuggestionPayload (with computed newContent),
+ *  or return an error string, or null if no suggestion was present at all. */
+function extractSuggestion(
+  fullText: string,
+  fileContext: string,
+  filename: string,
+): { text: string; suggestion: SuggestionPayload | null; error?: string } {
+  const tryResolve = (jsonStr: string, cleanText: string) => {
+    const raw = JSON.parse(jsonStr) as RawSuggestionPayload;
+    if (!raw.explanation) return null;
+
+    // Preferred: changes array
+    if (Array.isArray(raw.changes) && raw.changes.length > 0) {
+      const result = applyChanges(fileContext, raw.changes);
+      if (!result.ok) return { error: result.error, cleanText };
+      return {
+        suggestion: {
+          file: raw.file ?? filename,
+          newContent: result.result,
+          explanation: raw.explanation,
+        },
+        cleanText,
+      };
+    }
+
+    // Fallback: full-file newContent
+    if (raw.newContent) {
+      return {
+        suggestion: {
+          file: raw.file ?? filename,
+          newContent: raw.newContent,
+          explanation: raw.explanation,
+        },
+        cleanText,
+      };
+    }
+
+    return null;
+  };
+
+  // Primary format: ---SUGGESTION--- ... ---END_SUGGESTION---
   const marker = "---SUGGESTION---";
   const endMarker = "---END_SUGGESTION---";
   const startIdx = fullText.indexOf(marker);
   const endIdx = fullText.indexOf(endMarker);
-  
-  if (startIdx === -1 || endIdx === -1) {
-    return { text: fullText, suggestion: null };
-  }
-  
-  const jsonStr = fullText.slice(startIdx + marker.length, endIdx).trim();
-  const cleanText = fullText.slice(0, startIdx).trim();
-  
-  try {
-    const parsed = JSON.parse(jsonStr) as SuggestionPayload;
-    if (parsed.file && parsed.newContent && parsed.explanation) {
-      return { text: cleanText, suggestion: parsed };
-    }
-  } catch {
-    // Failed to parse suggestion JSON
-  }
-  
-  return { text: fullText, suggestion: null };
-}
 
-function applySuggestionPatch(
-  originalContent: string,
-  suggestion: { lineStart?: number; lineEnd?: number; newContent: string }
-): string {
-  if (!suggestion.lineStart || !suggestion.lineEnd) {
-    return suggestion.newContent;
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    const jsonStr = fullText.slice(startIdx + marker.length, endIdx).trim();
+    const cleanText = fullText.slice(0, startIdx).trim();
+    try {
+      const resolved = tryResolve(jsonStr, cleanText);
+      if (resolved) {
+        if ('error' in resolved) return { text: resolved.cleanText, suggestion: null, error: resolved.error };
+        return { text: resolved.cleanText, suggestion: resolved.suggestion! };
+      }
+    } catch { /* fall through */ }
   }
-  
-  const lines = originalContent.split('\n');
-  const before = lines.slice(0, suggestion.lineStart - 1);
-  const after = lines.slice(suggestion.lineEnd);
-  const newLines = suggestion.newContent.split('\n');
-  
-  return [...before, ...newLines, ...after].join('\n');
+
+  // Fallback: ```suggestion fence
+  const fenceMatch = fullText.match(/```suggestion\s*\n([\s\S]*?)\n```/);
+  if (fenceMatch) {
+    const cleanText = fullText.slice(0, fenceMatch.index).trim();
+    try {
+      const resolved = tryResolve(fenceMatch[1].trim(), cleanText);
+      if (resolved) {
+        if ('error' in resolved) return { text: resolved.cleanText, suggestion: null, error: resolved.error };
+        return { text: resolved.cleanText, suggestion: resolved.suggestion! };
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Last-resort: single ```python block → full-file replacement (no old_text validation possible)
+  const pythonFences = [...fullText.matchAll(/```python\s*\n([\s\S]*?)\n```/g)];
+  if (pythonFences.length === 1) {
+    const newContent = pythonFences[0][1].trim();
+    if (newContent.includes('\n')) {
+      return {
+        text: fullText.slice(0, pythonFences[0].index).trim(),
+        suggestion: {
+          file: filename,
+          newContent,
+          explanation: "(Extracted from code block — full file replacement)",
+        },
+      };
+    }
+  }
+
+  return { text: fullText, suggestion: null };
 }
 
 async function streamFromProvider(
@@ -225,8 +336,12 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     systemPrompt = config.agentSystemPrompt;
   }
 
+  // Library reference: injected for any code-aware mode
   if (config.mode === "suggestion" || config.mode === "agent") {
     systemPrompt += `\n\n---\n${PYLEARN_LIBRARY_REFERENCE}`;
+  }
+  // Diff/suggestion format: agent mode only — hardcoded, not editable by the teacher
+  if (config.mode === "agent") {
     systemPrompt += SUGGESTION_INSTRUCTION;
   }
 
@@ -243,9 +358,14 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
 
   if (parsed.data.conversationHistory) {
     for (const msg of parsed.data.conversationHistory) {
+      // Strip any leaked suggestion markers from history so they don't confuse the AI
+      const content = msg.content
+        .replace(/---SUGGESTION---[\s\S]*?---END_SUGGESTION---/g, '')
+        .replace(/```suggestion\s*\n[\s\S]*?\n```/g, '')
+        .trim();
       messages.push({
         role: msg.role as "user" | "assistant",
-        content: msg.content,
+        content,
       });
     }
   }
@@ -264,9 +384,14 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
       res
     );
 
-    const { text, suggestion } = extractSuggestion(fullContent);
+    const fileContext = parsed.data.fileContext ?? '';
+    const filename = parsed.data.filename ?? 'file.py';
+    const { text, suggestion, error } = extractSuggestion(fullContent, fileContext, filename);
     if (suggestion) {
       res.write(`data: ${JSON.stringify({ type: "suggestion", suggestion, cleanText: text })}\n\n`);
+    } else if (error) {
+      // old_text didn't match — show the explanation but no apply button
+      res.write(`data: ${JSON.stringify({ type: "suggestion", suggestion: null, cleanText: `${text}\n\n⚠ Could not apply automatically: ${error}` })}\n\n`);
     }
 
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
@@ -307,15 +432,9 @@ router.post("/ai/suggestion/accept", async (req, res): Promise<void> => {
     return;
   }
 
-  const finalContent = applySuggestionPatch(file.content || "", {
-    lineStart: parsed.data.lineStart ?? undefined,
-    lineEnd: parsed.data.lineEnd ?? undefined,
-    newContent: parsed.data.newContent,
-  });
-
   const [updated] = await db
     .update(filesTable)
-    .set({ content: finalContent })
+    .set({ content: parsed.data.newContent })
     .where(eq(filesTable.id, parsed.data.fileId))
     .returning();
 
