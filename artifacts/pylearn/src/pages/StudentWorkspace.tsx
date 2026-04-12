@@ -23,8 +23,8 @@ import type { Terminal as XTerm } from '@xterm/xterm';
 
 type FullscreenPanel = 'code' | null;
 
-// Shared panel header style — same teal/green for all panels
-const PANEL_HEADER = 'flex items-center justify-between px-3 py-2 shrink-0 bg-primary text-primary-foreground';
+// Shared panel header style — gradient from deep teal to primary
+const PANEL_HEADER = 'flex items-center justify-between px-3 py-2 shrink-0 bg-gradient-to-r from-[hsl(185_65%_28%)] to-primary text-primary-foreground';
 const PANEL_HEADER_BTN = 'h-6 px-2 text-[11px] gap-1 text-primary-foreground/70 hover:text-primary-foreground hover:bg-white/15';
 
 export default function StudentWorkspace() {
@@ -251,7 +251,7 @@ export default function StudentWorkspace() {
   // The terminal is always mounted (never unmounted) so xterm preserves its scroll
   // buffer even when the console sub-panel is toggled or hidden.
   const outputColumn = (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col rounded-xl overflow-hidden shadow-sm bg-card">
 
       {/* ── Output header ── */}
       <div className={PANEL_HEADER}>
@@ -340,9 +340,9 @@ export default function StudentWorkspace() {
   );
 
   return (
-    <div className="h-dvh w-full flex flex-col bg-background overflow-hidden font-sans">
+    <div className="h-dvh w-full flex flex-col bg-[hsl(185,25%,94%)] overflow-hidden font-sans">
       {/* ── App header ── */}
-      <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 shrink-0 shadow-sm relative z-10">
+      <header className="h-14 border-b border-primary/20 flex items-center justify-between px-4 shrink-0 shadow-sm relative z-10" style={{ background: 'linear-gradient(to right, hsl(185, 50%, 93%), white)' }}>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="font-display font-bold text-lg text-primary tracking-tight">PyLearn</div>
@@ -350,6 +350,9 @@ export default function StudentWorkspace() {
           </div>
           <div className="w-px h-5 bg-border" />
           <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+              {((profile?.firstName ?? (user as { firstName?: string } | null)?.firstName ?? 'S')[0] ?? 'S').toUpperCase()}
+            </div>
             <span className="font-semibold text-sm text-foreground">
               {[profile?.firstName ?? (user as { firstName?: string } | null)?.firstName, profile?.lastName ?? (user as { lastName?: string } | null)?.lastName].filter(Boolean).join(' ') || 'Student'}
             </span>
@@ -408,7 +411,7 @@ export default function StudentWorkspace() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-hidden flex pb-2">
+      <div className="flex-1 overflow-hidden flex p-2 gap-2">
         {isChatMode ? (
           /* ── Chat Mode Layout ── */
           <div className="flex-1 overflow-hidden">
@@ -419,7 +422,7 @@ export default function StudentWorkspace() {
                   onPromptSelect={(content) => setPendingPrompt(content)}
                 />
               </Panel>
-              <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+              <PanelResizeHandle className="w-2 bg-transparent hover:bg-primary/20 transition-colors rounded-full" />
               <Panel defaultSize={85}>
                 <AiChatPanel
                   credits={aiCredits ?? 0}
@@ -437,10 +440,12 @@ export default function StudentWorkspace() {
               <PanelGroup direction="horizontal">
                 {/* Sidebar */}
                 <Panel defaultSize={15} minSize={10} maxSize={25}>
-                  <Sidebar onFileSelect={() => {}} aiMode={aiConfig?.mode} />
+                  <div className="h-full rounded-xl overflow-hidden shadow-sm">
+                    <Sidebar onFileSelect={() => {}} aiMode={aiConfig?.mode} />
+                  </div>
                 </Panel>
 
-                <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                <PanelResizeHandle className="w-2 bg-transparent hover:bg-primary/20 transition-colors rounded-full" />
 
                 {/* Main: Code | Output split */}
                 <Panel defaultSize={85}>
@@ -448,7 +453,7 @@ export default function StudentWorkspace() {
 
                     {/* Code Editor — hidden when code is fullscreened */}
                     <Panel id="code-panel" defaultSize={fullscreenPanel === 'code' ? 100 : 50} minSize={25}>
-                      <div className="h-full flex flex-col bg-card">
+                      <div className="h-full flex flex-col bg-card rounded-xl overflow-hidden shadow-sm">
                         <div className={PANEL_HEADER}>
                           <div className="flex items-center gap-2 min-w-0">
                             <Code className="w-4 h-4 shrink-0" />
@@ -503,7 +508,7 @@ export default function StudentWorkspace() {
                     </Panel>
 
                     {fullscreenPanel === null && (
-                      <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                      <PanelResizeHandle className="w-2 bg-transparent hover:bg-primary/20 transition-colors rounded-full" />
                     )}
 
                     {/* Output column — hidden when code is fullscreened */}
@@ -522,10 +527,10 @@ export default function StudentWorkspace() {
             {showAiPanel && (
               <div className="flex shrink-0">
                 <div
-                  className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize shrink-0"
+                  className="w-2 bg-transparent hover:bg-primary/20 transition-colors cursor-col-resize shrink-0 rounded-full"
                   onMouseDown={handleAiPanelResizeStart}
                 />
-                <div style={{ width: aiPanelWidth }} className="overflow-hidden">
+                <div style={{ width: aiPanelWidth }} className="overflow-hidden rounded-xl shadow-sm">
                   <AiPanel credits={aiCredits ?? 0} onCreditUsed={() => refetchProfile()} />
                 </div>
               </div>
