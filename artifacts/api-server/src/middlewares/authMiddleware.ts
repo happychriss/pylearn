@@ -69,8 +69,9 @@ export async function authMiddleware(
 
     req.user = refreshed.user;
   } catch {
-    // Corrupt or unreachable session — clear the cookie and continue as unauthenticated
-    await clearSession(res, sid).catch(() => {});
+    // DB unreachable or transient error — do NOT clear the cookie.
+    // The session may still be valid; let the request proceed as unauthenticated
+    // so the client retries rather than losing its session permanently.
   }
   next();
 }

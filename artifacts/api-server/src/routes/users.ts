@@ -24,8 +24,12 @@ router.get("/users/me", async (req, res): Promise<void> => {
   // Include aiCredits for students
   let aiCredits: number | undefined;
   if (user.role === "student") {
-    const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, user.id));
-    if (account) aiCredits = account.aiCredits;
+    try {
+      const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, user.id));
+      if (account) aiCredits = account.aiCredits;
+    } catch {
+      // Non-fatal — aiCredits just won't be included
+    }
   }
 
   res.json(GetMyProfileResponse.parse({ ...user, aiCredits }));

@@ -175,9 +175,10 @@ router.get("/login", async (req: Request, res: Response) => {
 
   const redirectTo = oidc.buildAuthorizationUrl(config, {
     redirect_uri: callbackUrl,
-    scope: "openid email profile offline_access",
+    scope: "openid email profile",
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
+    access_type: "offline",
     prompt: "login consent",
     state,
     nonce,
