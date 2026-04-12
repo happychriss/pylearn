@@ -8,6 +8,8 @@ import { getUserUploadDir } from "./adventureStorage";
 // esbuild CJS output provides __dirname natively.
 
 const IDLE_TIMEOUT_MS = 60_000;
+// Hard CPU-time limit (seconds) enforced via bash ulimit — kills tight infinite loops
+const CPU_LIMIT_SECS = 30;
 
 /**
  * Universal display protocol:
@@ -47,11 +49,13 @@ function clearSession(userId: string) {
   clearTimeout(session.idleTimer);
   try {
     session.process.kill();
-  } catch {
+  } catch (err) {
+    console.error(`[ptyManager] Failed to kill process for user ${userId}:`, err);
   }
   try {
     fs.rmSync(session.tmpDir, { recursive: true, force: true });
-  } catch {
+  } catch (err) {
+    console.error(`[ptyManager] Failed to clean up tmp dir for user ${userId}:`, err);
   }
   sessions.delete(userId);
 }
@@ -111,8 +115,8 @@ function extractDisplayMarkers(session: PtySession, data: string): string {
       if (msg.mime && msg.data !== undefined) {
         session.onDisplayEvent?.(msg);
       }
-    } catch {
-      // Bad JSON — silently discard
+    } catch (err) {
+      console.error("[ptyManager] Malformed display marker JSON:", err);
     }
 
     // Continue processing after the closing null byte
@@ -135,7 +139,8 @@ function copyUserUploads(userId: string, tmpDir: string) {
         fs.copyFileSync(src, dest);
       }
     }
-  } catch {
+  } catch (err) {
+    console.error("[ptyManager] Failed to copy user uploads:", err);
   }
 }
 
@@ -162,7 +167,9 @@ export function startPtySession(
     ? `${modulesDir}:${existingPythonPath}`
     : modulesDir;
 
-  const shell = pty.spawn("python3", ["-u", tmpFile], {
+  // Wrap in bash so we can enforce a CPU-time hard limit (kills infinite loops).
+  // `exec` replaces the shell process so limits are inherited by python3 directly.
+  const shell = pty.spawn("bash", ["-c", `ulimit -t ${CPU_LIMIT_SECS}; exec python3 -u "${tmpFile}"`], {
     name: "xterm-256color",
     cols: 120,
     rows: 30,
@@ -206,7 +213,8 @@ export function startPtySession(
     clearTimeout(session.idleTimer);
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {
+    } catch (err) {
+      console.error(`[ptyManager] Failed to clean up tmp dir on exit for user ${userId}:`, err);
     }
     sessions.delete(userId);
     onExit(exitCode ?? 0);

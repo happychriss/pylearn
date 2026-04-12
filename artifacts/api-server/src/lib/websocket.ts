@@ -73,7 +73,9 @@ export function setupWebSocket(server: Server) {
       try {
         const msg = JSON.parse(raw.toString());
         handleMessage(client, msg, ws);
-      } catch {}
+      } catch (err) {
+        console.error("[websocket] Malformed message from user", client.userId, err);
+      }
     });
 
     ws.on("close", () => {

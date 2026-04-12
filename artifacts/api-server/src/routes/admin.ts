@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { PYLEARN_LIBRARY_REFERENCE } from "../lib/pylearn-ref";
 import crypto from "crypto";
@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { db, usersTable, aiConfigTable, helpRequestsTable, filesTable, studentAccountsTable } from "@workspace/db";
+import { db, usersTable, aiConfigTable, helpRequestsTable, filesTable, studentAccountsTable, sessionsTable } from "@workspace/db";
 import {
   ListStudentsResponse,
   GetAiConfigResponse,
@@ -18,21 +18,19 @@ import {
 } from "@workspace/api-zod";
 import { onlineUsers } from "../lib/wsState";
 import { closeUserConnections, broadcastToStudents } from "../lib/websocket";
-import { sessionsTable } from "@workspace/db";
+import { requireAdmin } from "../middlewares/requireAdmin";
 
 const router: IRouter = Router();
 
-async function requireAdmin(req: Request, res: Response): Promise<boolean> {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Not authenticated" });
-    return false;
+/** Invalidates all active sessions for a given student (e.g. on pause or delete). */
+async function invalidateStudentSessions(studentId: string): Promise<void> {
+  const allSessions = await db.select().from(sessionsTable);
+  for (const session of allSessions) {
+    const sess = session.sess as unknown as { user?: { id?: string } };
+    if (sess?.user?.id === studentId) {
+      await db.delete(sessionsTable).where(eq(sessionsTable.sid, session.sid));
+    }
   }
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
-  if (!user || user.role !== "admin") {
-    res.status(403).json({ error: "Admin access required" });
-    return false;
-  }
-  return true;
 }
 
 function generatePin(): string {
@@ -178,14 +176,7 @@ router.patch("/admin/students/:id", async (req, res): Promise<void> => {
 
   if (isPaused) {
     closeUserConnections(studentId);
-
-    const allSessions = await db.select().from(sessionsTable);
-    for (const session of allSessions) {
-      const sess = session.sess as unknown as { user?: { id?: string } };
-      if (sess?.user?.id === studentId) {
-        await db.delete(sessionsTable).where(eq(sessionsTable.sid, session.sid));
-      }
-    }
+    await invalidateStudentSessions(studentId);
   }
 
   const activeHelp = await db
@@ -197,7 +188,6 @@ router.patch("/admin/students/:id", async (req, res): Promise<void> => {
   res.json({
     id: studentId,
     displayName: account.displayName,
-    pin: account.pinPlain,
     isPaused,
     createdAt: account.createdAt,
     isOnline: onlineUsers.has(studentId),
@@ -221,14 +211,7 @@ router.delete("/admin/students/:id", async (req, res): Promise<void> => {
   }
 
   closeUserConnections(studentId);
-
-  const allSessions = await db.select().from(sessionsTable);
-  for (const session of allSessions) {
-    const sess = session.sess as unknown as { user?: { id?: string } };
-    if (sess?.user?.id === studentId) {
-      await db.delete(sessionsTable).where(eq(sessionsTable.sid, session.sid));
-    }
-  }
+  await invalidateStudentSessions(studentId);
 
   await db.transaction(async (tx) => {
     await tx.delete(filesTable).where(eq(filesTable.userId, studentId));

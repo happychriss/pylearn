@@ -7,7 +7,9 @@ import router from "./routes";
 
 const app: Express = express();
 
-app.use(cors({ credentials: true, origin: true }));
+// Allow only the configured deployment origin (APP_URL in prod, localhost in dev)
+const allowedOrigin = process.env.APP_URL ?? "http://localhost:8080";
+app.use(cors({ credentials: true, origin: allowedOrigin }));
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));

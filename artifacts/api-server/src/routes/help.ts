@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, helpRequestsTable, usersTable } from "@workspace/db";
 import {
@@ -7,21 +7,9 @@ import {
   DismissHelpRequestParams,
   DismissHelpRequestResponse,
 } from "@workspace/api-zod";
+import { requireAdmin } from "../middlewares/requireAdmin";
 
 const router: IRouter = Router();
-
-async function requireAdmin(req: Request, res: Response): Promise<boolean> {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Not authenticated" });
-    return false;
-  }
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
-  if (!user || user.role !== "admin") {
-    res.status(403).json({ error: "Admin access required" });
-    return false;
-  }
-  return true;
-}
 
 router.get("/help-requests", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
