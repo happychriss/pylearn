@@ -6,13 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface StudentAccountInfo {
+export interface UpdateStudentCreditsResponse {
   id: string;
-  displayName: string;
-  pin: string;
-  isPaused: boolean;
   aiCredits: number;
-  createdAt: Date;
-  isOnline: boolean;
-  hasHelpRequest: boolean;
 }

@@ -22,17 +22,17 @@ export function EditorPanel({ readOnly = false, onContentChange }: EditorPanelPr
   }
 
   return (
-    <div className="h-full w-full overflow-hidden bg-[#1e1e1e]">
+    <div className="h-full w-full overflow-hidden bg-white">
       <Editor
         height="100%"
         language="python"
-        theme="vs-dark"
+        theme="vs"
         value={content}
         options={{
           minimap: { enabled: false },
           fontSize: 14,
           fontFamily: 'Fira Code',
-          padding: { top: 16 },
+          padding: { top: 16, bottom: 8 },
           readOnly: readOnly,
           roundedSelection: true,
           scrollBeyondLastLine: false,

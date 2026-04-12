@@ -1,4 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getSessionType } from '@/lib/session-type';
+
+// Session type getter for WebSocket URL
+let _sessionTypeGetter: (() => string) = getSessionType;
+
+export function setWsSessionTypeGetter(getter: () => string) {
+  _sessionTypeGetter = getter;
+}
 
 type Handler = (data: Record<string, unknown>) => void;
 type ConnectCallback = () => void;
@@ -93,7 +101,10 @@ function openConnection(path: string) {
   setConnStatus(conn, 'connecting');
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${protocol}//${window.location.host}${path}`;
+  // Include session type as query param for dual-session support
+  const sessionType = _sessionTypeGetter ? _sessionTypeGetter() : 'admin';
+  const separator = path.includes('?') ? '&' : '?';
+  const url = `${protocol}//${window.location.host}${path}${separator}sessionType=${sessionType}`;
 
   let ws: WebSocket;
   try {

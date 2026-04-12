@@ -5,7 +5,7 @@ import { getSessionId, getSession } from "./auth";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import cookie from "cookie";
-import { startPtySession, sendPtyInput, stopPtySession } from "./ptyManager";
+import { startPtySession, sendPtyInput, stopPtySession, type DisplayMessage } from "./ptyManager";
 
 interface WsClient {
   ws: WebSocket;
@@ -27,7 +27,12 @@ export function closeUserConnections(userId: string) {
 async function authenticateWs(req: IncomingMessage): Promise<{ userId: string; role: string } | null> {
   try {
     const cookies = cookie.parse(req.headers.cookie || "");
-    const sid = cookies["sid"];
+    // Check query param for session type (student vs admin)
+    const url = new URL(req.url || "", "http://localhost");
+    const sessionType = url.searchParams.get("sessionType");
+    const sid = sessionType === "student"
+      ? (cookies["sid_student"] || cookies["sid"])
+      : (cookies["sid"] || cookies["sid_student"]);
     if (!sid) return null;
 
     const session = await getSession(sid);
@@ -200,16 +205,16 @@ function handleMessage(client: WsClient, msg: WsMessage, ws: WebSocket) {
         msg.code,
         (data) => {
           broadcastToUser(userId, { type: "pty-output", data });
-          broadcastToAdmins({ type: "pty-output", userId, data });
+          broadcastToAdmins({ type: "pty-output", userId, data }, userId);
         },
         (exitCode) => {
           broadcastToUser(userId, { type: "pty-exit", exitCode });
-          broadcastToAdmins({ type: "pty-exit", userId, exitCode });
+          broadcastToAdmins({ type: "pty-exit", userId, exitCode }, userId);
         },
-        (event) => {
-          const adventureMsg = { type: "adventure-event", userId, event };
-          broadcastToUser(userId, adventureMsg);
-          broadcastToAdmins(adventureMsg);
+        (displayMsg: DisplayMessage) => {
+          const payload = { type: "display-event", userId, event: displayMsg };
+          broadcastToUser(userId, payload);
+          broadcastToAdmins(payload, userId);
         }
       );
       break;
@@ -230,10 +235,20 @@ function handleMessage(client: WsClient, msg: WsMessage, ws: WebSocket) {
   }
 }
 
-function broadcastToAdmins(msg: Record<string, unknown>) {
+function broadcastToAdmins(msg: Record<string, unknown>, excludeUserId?: string) {
   clients.forEach((client) => {
-    if (client.role === "admin" && client.ws.readyState === WebSocket.OPEN) {
+    if (client.role === "admin" && client.ws.readyState === WebSocket.OPEN
+        && client.userId !== excludeUserId) {
       client.ws.send(JSON.stringify(msg));
+    }
+  });
+}
+
+export function broadcastToStudents(msg: Record<string, unknown>) {
+  const payload = JSON.stringify(msg);
+  clients.forEach((client) => {
+    if (client.role !== "admin" && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(payload);
     }
   });
 }

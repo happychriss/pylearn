@@ -2,11 +2,18 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { setAuthSessionTypeGetter } from "@workspace/auth-web";
+import { setSessionTypeGetter } from "@workspace/api-client-react";
+import { getSessionType } from "@/lib/session-type";
 import Landing from "@/pages/Landing";
 import StudentWorkspace from "@/pages/StudentWorkspace";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminWorkspaceView from "@/pages/AdminWorkspaceView";
 import NotFound from "@/pages/not-found";
+
+// Wire up session type getter for all subsystems (auth, API client, WebSocket)
+setAuthSessionTypeGetter(getSessionType);
+setSessionTypeGetter(getSessionType);
 
 const queryClient = new QueryClient();
 

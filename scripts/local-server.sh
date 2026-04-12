@@ -2,6 +2,8 @@
 # =============================================================
 # PyLearn Local Dev Server — start / stop / restart / status / build / logs
 # Usage:  ./scripts/local-server.sh [start|stop|restart|status|build|logs]
+#
+# restart = build + stop + start   ← use this after any code changes
 # =============================================================
 set -euo pipefail
 
@@ -170,6 +172,7 @@ do_start() {
 
 do_restart() {
   do_stop
+  do_build
   do_start
 }
 
@@ -196,7 +199,7 @@ case "${1:-status}" in
     echo ""
     echo "  start    Start the server (auto-builds if needed)"
     echo "  stop     Stop the server and free port $PORT"
-    echo "  restart  Stop + start"
+    echo "  restart  Build + stop + start  ← use after code changes"
     echo "  status   Show running state and health"
     echo "  build    Rebuild frontend + api-server"
     echo "  logs     Show last 50 log lines (or: logs N)"

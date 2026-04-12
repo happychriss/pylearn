@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type UpdateAiConfigBodyMode =
-  (typeof UpdateAiConfigBodyMode)[keyof typeof UpdateAiConfigBodyMode];
+export type StudentAiConfigMode =
+  (typeof StudentAiConfigMode)[keyof typeof StudentAiConfigMode];
 
-export const UpdateAiConfigBodyMode = {
+export const StudentAiConfigMode = {
   off: "off",
   suggestion: "suggestion",
   agent: "agent",

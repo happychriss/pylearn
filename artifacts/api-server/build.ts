@@ -1,7 +1,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import { build as esbuild } from "esbuild";
-import { rm, readFile } from "fs/promises";
+import { rm, readFile, cp } from "fs/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +38,13 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  // Copy python-modules into dist/ so ptyManager can find them
+  // ptyManager uses: path.join(__dirname, "..", "python-modules")
+  // In the bundle, __dirname = dist/, so it resolves to python-modules/ next to dist/
+  const srcPyModules = path.resolve(__dirname, "src/python-modules");
+  const destPyModules = path.resolve(distDir, "..", "python-modules");
+  await cp(srcPyModules, destPyModules, { recursive: true });
 }
 
 buildAll().catch((err) => {

@@ -1,23 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRoute, useLocation } from 'wouter';
+import { setSessionType } from '@/lib/session-type';
+
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useListFiles, useListStudents } from '@workspace/api-client-react';
 import { EditorPanel } from '@/components/workspace/EditorPanel';
 import { AiPanel } from '@/components/workspace/AiPanel';
 import { Terminal } from '@/components/workspace/Terminal';
-import { AdventurePanel } from '@/components/workspace/AdventurePanel';
+import { OutputPanel } from '@/components/workspace/OutputPanel';
 import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Users, FileCode, MessageSquare, Code, Swords } from 'lucide-react';
+import { ArrowLeft, Users, FileCode, MessageSquare, Code, Monitor } from 'lucide-react';
 import { useWebSocket } from '@/hooks/use-websocket';
-import { useAdventureEvents } from '@/hooks/use-adventure-events';
+import { useDisplayEvents } from '@/hooks/use-display-events';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import type { Terminal as XTerm } from '@xterm/xterm';
 
-type ActiveTab = 'code' | 'adventure';
+type ActiveTab = 'code' | 'output';
 
 export default function AdminWorkspaceView() {
+  setSessionType('admin');
   const [, params] = useRoute('/admin/student/:id');
   const studentId = params?.id;
   const [, setLocation] = useLocation();
@@ -34,14 +37,13 @@ export default function AdminWorkspaceView() {
   const [coEdit, setCoEdit] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const { emit, on } = useWebSocket('/api/ws');
-  const { state: adventureState, hasNewEvent, clearNewEvent, startListening, setActiveTab: setAdventureActiveTab } = useAdventureEvents(studentId);
+  const {
+    displayMessages, adventureState, hasNewEvent, hasAdventureContent,
+    clearNewEvent, resetState: resetDisplay, setActiveTab: setDisplayActiveTab,
+  } = useDisplayEvents(studentId);
   const terminalRef = useRef<XTerm | null>(null);
 
-  const showChatPanel = isAiChatOpen && activeTab !== 'adventure';
-
-  useEffect(() => {
-    startListening();
-  }, [startListening]);
+  const showChatPanel = isAiChatOpen && activeTab !== 'output';
 
   useEffect(() => {
     if (files) setOpenFiles(files);
@@ -93,11 +95,11 @@ export default function AdminWorkspaceView() {
 
   const handleTabChange = (tab: ActiveTab) => {
     if (tab === activeTab) return;
-    if (tab === 'adventure') {
+    if (tab === 'output') {
       clearNewEvent();
     }
     setActiveTab(tab);
-    setAdventureActiveTab(tab);
+    setDisplayActiveTab(tab);
   };
 
   return (
@@ -171,16 +173,16 @@ export default function AdminWorkspaceView() {
                         Source Code
                       </button>
                       <button
-                        onClick={() => handleTabChange('adventure')}
+                        onClick={() => handleTabChange('output')}
                         className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 relative ${
-                          activeTab === 'adventure'
+                          activeTab === 'output'
                             ? 'border-primary text-primary bg-background'
                             : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
                         }`}
                       >
-                        <Swords className="w-4 h-4" />
-                        Adventure
-                        {hasNewEvent && activeTab !== 'adventure' && (
+                        <Monitor className="w-4 h-4" />
+                        Output
+                        {hasNewEvent && activeTab !== 'output' && (
                           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
                         )}
                       </button>
@@ -196,8 +198,13 @@ export default function AdminWorkspaceView() {
                           <EditorPanel readOnly={!coEdit} onContentChange={coEdit ? handleEditorChange : undefined} />
                         </div>
                       </div>
-                      <div className={`absolute inset-0 ${activeTab === 'adventure' ? '' : 'invisible'}`}>
-                        <AdventurePanel adventureState={adventureState} overrideUserId={studentId} />
+                      <div className={`absolute inset-0 ${activeTab === 'output' ? '' : 'invisible'}`}>
+                        <OutputPanel
+                          displayMessages={displayMessages}
+                          adventureState={adventureState}
+                          hasAdventureContent={hasAdventureContent}
+                          overrideUserId={studentId}
+                        />
                       </div>
                     </div>
                   </div>

@@ -11,6 +11,13 @@ interface AuthState {
   logout: () => void;
 }
 
+// Session type getter — set by the app layer for dual-session support
+let _sessionTypeGetter: (() => string) | null = null;
+
+export function setAuthSessionTypeGetter(getter: () => string) {
+  _sessionTypeGetter = getter;
+}
+
 export function useAuth(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -18,7 +25,12 @@ export function useAuth(): AuthState {
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/api/auth/user", { credentials: "include" })
+    const headers: Record<string, string> = {};
+    if (_sessionTypeGetter) {
+      headers["x-session-type"] = _sessionTypeGetter();
+    }
+
+    fetch("/api/auth/user", { credentials: "include", headers })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<{ user: AuthUser | null }>;

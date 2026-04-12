@@ -96,6 +96,7 @@ export const GetMyProfileResponse = zod.object({
   profileImageUrl: zod.string().nullable(),
   role: zod.enum(["admin", "student"]),
   createdAt: zod.date(),
+  aiCredits: zod.number().optional(),
 });
 
 /**
@@ -113,6 +114,7 @@ export const SetMyRoleResponse = zod.object({
   profileImageUrl: zod.string().nullable(),
   role: zod.enum(["admin", "student"]),
   createdAt: zod.date(),
+  aiCredits: zod.number().optional(),
 });
 
 /**
@@ -326,6 +328,7 @@ export const ListStudentAccountsResponseItem = zod.object({
   displayName: zod.string(),
   pin: zod.string(),
   isPaused: zod.boolean(),
+  aiCredits: zod.number(),
   createdAt: zod.date(),
   isOnline: zod.boolean(),
   hasHelpRequest: zod.boolean(),
@@ -358,6 +361,7 @@ export const ToggleStudentPauseResponse = zod.object({
   displayName: zod.string(),
   pin: zod.string(),
   isPaused: zod.boolean(),
+  aiCredits: zod.number(),
   createdAt: zod.date(),
   isOnline: zod.boolean(),
   hasHelpRequest: zod.boolean(),
@@ -389,16 +393,90 @@ export const ListStudentsResponseItem = zod.object({
 export const ListStudentsResponse = zod.array(ListStudentsResponseItem);
 
 /**
+ * @summary Set AI credits for a student
+ */
+export const UpdateStudentCreditsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateStudentCreditsBodyAiCreditsMin = 0;
+
+export const UpdateStudentCreditsBody = zod.object({
+  aiCredits: zod.number().min(updateStudentCreditsBodyAiCreditsMin),
+});
+
+export const UpdateStudentCreditsResponse = zod.object({
+  id: zod.string(),
+  aiCredits: zod.number(),
+});
+
+/**
+ * @summary List all prompt templates
+ */
+export const ListPromptTemplatesResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  content: zod.string(),
+  createdByAdminId: zod.string(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+export const ListPromptTemplatesResponse = zod.array(
+  ListPromptTemplatesResponseItem,
+);
+
+/**
+ * @summary Create a new prompt template
+ */
+
+export const createPromptTemplateBodyContentDefault = ``;
+
+export const CreatePromptTemplateBody = zod.object({
+  title: zod.string().min(1),
+  content: zod.string().default(createPromptTemplateBodyContentDefault),
+});
+
+/**
+ * @summary Delete a prompt template
+ */
+export const DeletePromptTemplateParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeletePromptTemplateResponse = zod.object({
+  ok: zod.boolean().optional(),
+});
+
+/**
+ * @summary Assign a prompt template to a student
+ */
+export const AssignPromptToStudentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AssignPromptToStudentBody = zod.object({
+  studentId: zod.string(),
+});
+
+/**
+ * @summary Get current AI mode for student workspace
+ */
+export const GetStudentAiConfigResponse = zod.object({
+  mode: zod.enum(["off", "suggestion", "agent", "chat"]),
+});
+
+/**
  * @summary Get AI configuration
  */
 export const GetAiConfigResponse = zod.object({
   id: zod.number(),
   provider: zod.enum(["openai", "anthropic", "gemini"]),
-  mode: zod.enum(["off", "suggestion", "agent"]),
+  mode: zod.enum(["off", "suggestion", "agent", "chat"]),
   apiKey: zod.string().nullish(),
   suggestionSystemPrompt: zod.string(),
   agentSystemPrompt: zod.string(),
   offSystemPrompt: zod.string(),
+  chatSystemPrompt: zod.string(),
 });
 
 /**
@@ -406,19 +484,21 @@ export const GetAiConfigResponse = zod.object({
  */
 export const UpdateAiConfigBody = zod.object({
   provider: zod.enum(["openai", "anthropic", "gemini"]).optional(),
-  mode: zod.enum(["off", "suggestion", "agent"]).optional(),
+  mode: zod.enum(["off", "suggestion", "agent", "chat"]).optional(),
   apiKey: zod.string().nullish(),
   suggestionSystemPrompt: zod.string().optional(),
   agentSystemPrompt: zod.string().optional(),
   offSystemPrompt: zod.string().optional(),
+  chatSystemPrompt: zod.string().optional(),
 });
 
 export const UpdateAiConfigResponse = zod.object({
   id: zod.number(),
   provider: zod.enum(["openai", "anthropic", "gemini"]),
-  mode: zod.enum(["off", "suggestion", "agent"]),
+  mode: zod.enum(["off", "suggestion", "agent", "chat"]),
   apiKey: zod.string().nullish(),
   suggestionSystemPrompt: zod.string(),
   agentSystemPrompt: zod.string(),
   offSystemPrompt: zod.string(),
+  chatSystemPrompt: zod.string(),
 });

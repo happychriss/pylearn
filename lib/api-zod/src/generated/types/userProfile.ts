@@ -19,4 +19,5 @@ export interface UserProfile {
   profileImageUrl: string | null;
   role: UserProfileRole;
   createdAt: Date;
+  aiCredits?: number;
 }

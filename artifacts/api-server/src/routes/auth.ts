@@ -17,6 +17,7 @@ import {
   createSession,
   deleteSession,
   SESSION_COOKIE,
+  STUDENT_SESSION_COOKIE,
   SESSION_TTL,
   ISSUER_URL,
   type SessionData,
@@ -37,6 +38,16 @@ function getOrigin(req: Request): string {
 
 function setSessionCookie(res: Response, sid: string) {
   res.cookie(SESSION_COOKIE, sid, {
+    httpOnly: true,
+    secure: IS_SECURE,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
+}
+
+function setStudentSessionCookie(res: Response, sid: string) {
+  res.cookie(STUDENT_SESSION_COOKIE, sid, {
     httpOnly: true,
     secure: IS_SECURE,
     sameSite: "lax",
@@ -114,71 +125,40 @@ router.get("/auth/user", (req: Request, res: Response) => {
   );
 });
 
-// --- Local auth mode: simple username/password for testing without Google OAuth ---
+router.get("/auth/mode", (_req: Request, res: Response) => {
+  res.json({ isLocal: IS_LOCAL_AUTH });
+});
+
+// --- Local auth mode: single-click login for local dev, no credentials required ---
 if (IS_LOCAL_AUTH) {
-  const LOCAL_USERNAME = process.env.LOCAL_AUTH_USER || "teacher";
-  const LOCAL_PASSWORD = process.env.LOCAL_AUTH_PASS || "admin";
-
-  router.get("/login", (_req: Request, res: Response) => {
-    res.setHeader("Content-Type", "text/html");
-    res.send(`<!DOCTYPE html>
-<html><head><title>PyLearn Local Login</title>
-<style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
-form{background:#fff;padding:2rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);min-width:300px}
-h2{margin-top:0}input{display:block;width:100%;padding:.5rem;margin:.5rem 0 1rem;box-sizing:border-box;border:1px solid #ccc;border-radius:4px}
-button{background:#4285f4;color:#fff;border:none;padding:.75rem 1.5rem;border-radius:4px;cursor:pointer;width:100%;font-size:1rem}
-button:hover{background:#3367d6}.err{color:red;font-size:.9rem}</style></head>
-<body><form method="POST" action="/api/login">
-<h2>PyLearn Local Login</h2>
-<label>Username<input name="username" required autofocus></label>
-<label>Password<input name="password" type="password" required></label>
-<button type="submit">Sign In</button>
-</form></body></html>`);
-  });
-
-  router.post("/login", async (req: Request, res: Response) => {
-    const { username, password } = req.body || {};
-    if (username !== LOCAL_USERNAME || password !== LOCAL_PASSWORD) {
-      res.status(401).setHeader("Content-Type", "text/html");
-      res.send(`<!DOCTYPE html>
-<html><head><title>Login Failed</title>
-<style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
-.box{background:#fff;padding:2rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);text-align:center}
-a{color:#4285f4}</style></head>
-<body><div class="box"><h2>Login Failed</h2><p>Invalid username or password.</p><a href="/api/login">Try again</a></div></body></html>`);
-      return;
-    }
-
-    // Upsert a local teacher user
-    let dbUser;
+  router.get("/login", async (_req: Request, res: Response) => {
     try {
-      dbUser = await upsertUser({
+      const dbUser = await upsertUser({
         sub: "local-teacher",
-        email: `${username}@localhost.dev`,
+        email: "teacher@localhost.dev",
         given_name: "Local",
         family_name: "Teacher",
         picture: null,
       });
+
+      const sessionData: SessionData = {
+        user: {
+          id: dbUser.id,
+          email: dbUser.email,
+          firstName: dbUser.firstName,
+          lastName: dbUser.lastName,
+          profileImageUrl: dbUser.profileImageUrl,
+        },
+        access_token: "local-session",
+      };
+
+      const sid = await createSession(sessionData);
+      setSessionCookie(res, sid);
+      res.redirect("/");
     } catch (err) {
-      console.error("Local login upsert error:", err);
+      console.error("Local login error:", err);
       res.status(500).send("Login failed — database error");
-      return;
     }
-
-    const sessionData: SessionData = {
-      user: {
-        id: dbUser.id,
-        email: dbUser.email,
-        firstName: dbUser.firstName,
-        lastName: dbUser.lastName,
-        profileImageUrl: dbUser.profileImageUrl,
-      },
-      access_token: "local-session",
-    };
-
-    const sid = await createSession(sessionData);
-    setSessionCookie(res, sid);
-    res.redirect("/");
   });
 } else {
 // --- Google OAuth login ---
@@ -281,8 +261,11 @@ router.get("/callback", async (req: Request, res: Response) => {
 } // end else (Google OAuth)
 
 router.post("/auth/student-logout", async (req: Request, res: Response) => {
-  const sid = getSessionId(req);
-  await clearSession(res, sid);
+  const sid = req.cookies?.[STUDENT_SESSION_COOKIE];
+  if (sid) {
+    await deleteSession(sid);
+  }
+  res.clearCookie(STUDENT_SESSION_COOKIE, { path: "/" });
   res.json({ success: true });
 });
 
@@ -315,7 +298,7 @@ function checkRateLimit(key: string): boolean {
 
 const STARTER_FILE_CONTENT = `# My Python Adventure
 # Welcome to PyLearn! Try running this code.
-from adventure import scene, say, ask
+from pylearn import scene, say, ask
 
 scene("The Enchanted Forest")
 say("You stand at a crossroads in a dark forest.")
@@ -419,7 +402,7 @@ router.post("/auth/student-login", async (req: Request, res: Response) => {
   };
 
   const sid = await createSession(sessionData);
-  setSessionCookie(res, sid);
+  setStudentSessionCookie(res, sid);
 
   const existingFiles = await db
     .select()

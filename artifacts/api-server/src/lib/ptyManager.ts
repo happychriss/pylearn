@@ -10,16 +10,22 @@ import { getUserUploadDir } from "./adventureStorage";
 const IDLE_TIMEOUT_MS = 60_000;
 
 /**
- * Adventure marker protocol spec:
- * Python code emits structured events to stdout using the prefix below followed by JSON.
- * Format: ADVENTURE_EVENT:{"type":"scene","name":"forest"}\n
- * The PTY output handler intercepts complete lines starting with this prefix,
- * strips them from the terminal stream (invisible to xterm), parses the JSON,
- * and forwards the event object via WebSocket as an "adventure-event" message.
- * Supported event types: scene, show, move, say, ask.
- * Any user output line beginning with this prefix is consumed as protocol.
+ * Universal display protocol:
+ * Python code emits rich output via null-byte delimited markers in stdout.
+ * Format: \x00PYLEARN_DISPLAY\x00{"mime":"...","data":...}\x00
+ * The PTY output handler intercepts these markers, strips them from the
+ * terminal stream, parses the JSON, and forwards the display message via
+ * WebSocket as a "display-event" message.
  */
-const ADVENTURE_MARKER = "ADVENTURE_EVENT:";
+const DISPLAY_START = "\x00PYLEARN_DISPLAY\x00";
+const DISPLAY_END = "\x00";
+
+export interface DisplayMessage {
+  mime: string;
+  data: unknown;
+  id?: string;
+  append?: boolean;
+}
 
 interface PtySession {
   process: pty.IPty;
@@ -28,8 +34,8 @@ interface PtySession {
   idleTimer: ReturnType<typeof setTimeout>;
   onOutput: (data: string) => void;
   onExit: (code: number) => void;
-  onAdventureEvent?: (event: Record<string, unknown>) => void;
-  lineBuffer: string;
+  onDisplayEvent?: (event: DisplayMessage) => void;
+  displayBuffer: string;
 }
 
 const sessions = new Map<string, PtySession>();
@@ -57,93 +63,68 @@ function resetIdleTimer(userId: string) {
   session.idleTimer = setTimeout(() => clearSession(userId), IDLE_TIMEOUT_MS);
 }
 
-function processOutput(session: PtySession, data: string): string {
-  const combined = session.lineBuffer + data;
-  session.lineBuffer = "";
 
-  const nlIndex = combined.lastIndexOf("\n");
-  let completePart: string;
-  let remainder: string;
+/**
+ * Extract and emit any \x00PYLEARN_DISPLAY\x00{json}\x00 markers from raw data.
+ * Returns the data with markers stripped out.
+ */
+function extractDisplayMarkers(session: PtySession, data: string): string {
+  // Prepend any partial display buffer from previous chunk
+  let input = session.displayBuffer + data;
+  session.displayBuffer = "";
+  let output = "";
 
-  if (nlIndex === -1) {
-    if (combined.startsWith(ADVENTURE_MARKER.slice(0, combined.length)) && combined.length < ADVENTURE_MARKER.length) {
-      session.lineBuffer = combined;
-      return "";
-    }
-    if (combined.startsWith(ADVENTURE_MARKER)) {
-      session.lineBuffer = combined;
-      return "";
-    }
-    return combined;
-  }
-
-  completePart = combined.slice(0, nlIndex + 1);
-  remainder = combined.slice(nlIndex + 1);
-
-  if (remainder.length > 0) {
-    if (remainder.startsWith(ADVENTURE_MARKER) ||
-        (remainder.length < ADVENTURE_MARKER.length && ADVENTURE_MARKER.startsWith(remainder))) {
-      session.lineBuffer = remainder;
-    } else {
-      completePart += remainder;
-    }
-  }
-
-  const lines = completePart.split("\n");
-  const output: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const clean = line.replace(/\r$/, "");
-    if (clean.startsWith(ADVENTURE_MARKER)) {
-      try {
-        const jsonStr = clean.slice(ADVENTURE_MARKER.length);
-        const event = JSON.parse(jsonStr);
-        session.onAdventureEvent?.(event);
-      } catch {
+  while (true) {
+    const startIdx = input.indexOf(DISPLAY_START);
+    if (startIdx === -1) {
+      // No more markers — check if data ends with a partial DISPLAY_START
+      // e.g. input ends with "\x00PYL" which could be the start of a marker
+      for (let i = Math.max(0, input.length - DISPLAY_START.length); i < input.length; i++) {
+        const tail = input.slice(i);
+        if (DISPLAY_START.startsWith(tail) && tail.length < DISPLAY_START.length) {
+          session.displayBuffer = tail;
+          output += input.slice(0, i);
+          return output;
+        }
       }
-    } else {
-      output.push(line);
+      output += input;
+      return output;
     }
-  }
 
-  return output.join("\n");
+    // Add everything before the marker to output
+    output += input.slice(0, startIdx);
+
+    // Find the closing null byte after the start marker
+    const jsonStart = startIdx + DISPLAY_START.length;
+    const endIdx = input.indexOf(DISPLAY_END, jsonStart);
+
+    if (endIdx === -1) {
+      // Incomplete marker — buffer it for next chunk
+      session.displayBuffer = input.slice(startIdx);
+      return output;
+    }
+
+    // Extract and parse the JSON
+    const jsonStr = input.slice(jsonStart, endIdx);
+    try {
+      const msg = JSON.parse(jsonStr) as DisplayMessage;
+      if (msg.mime && msg.data !== undefined) {
+        session.onDisplayEvent?.(msg);
+      }
+    } catch {
+      // Bad JSON — silently discard
+    }
+
+    // Continue processing after the closing null byte
+    input = input.slice(endIdx + 1);
+  }
 }
 
-const ADVENTURE_PY_SOURCE = `import sys
-import json
+function processOutput(session: PtySession, data: string): string {
+  return extractDisplayMarkers(session, data);
+}
 
-_MARKER = "ADVENTURE_EVENT:"
-
-def _emit(event_type, **kwargs):
-    payload = {"type": event_type, **kwargs}
-    sys.stdout.write(_MARKER + json.dumps(payload) + "\\n")
-    sys.stdout.flush()
-
-def scene(name):
-    _emit("scene", name=str(name))
-    print("--- Scene:", str(name), "---")
-
-def show(sprite, x=0, y=0):
-    _emit("show", sprite=str(sprite), x=int(x), y=int(y))
-
-def move(sprite, x=0, y=0):
-    _emit("move", sprite=str(sprite), x=int(x), y=int(y))
-
-def say(text):
-    _emit("say", text=str(text))
-    print(str(text))
-
-def ask(prompt):
-    _emit("ask", prompt=str(prompt))
-    return input(prompt)
-`;
-
-function copyAdventureAssets(userId: string, tmpDir: string) {
-  try {
-    fs.writeFileSync(path.join(tmpDir, "adventure.py"), ADVENTURE_PY_SOURCE, "utf8");
-  } catch {
-  }
-
+function copyUserUploads(userId: string, tmpDir: string) {
   try {
     const uploadDir = getUserUploadDir(userId);
     if (fs.existsSync(uploadDir)) {
@@ -163,14 +144,14 @@ export function startPtySession(
   code: string,
   onOutput: (data: string) => void,
   onExit: (code: number) => void,
-  onAdventureEvent?: (event: Record<string, unknown>) => void
+  onDisplayEvent?: (event: DisplayMessage) => void
 ) {
   clearSession(userId);
 
   const tmpDir = path.join(os.tmpdir(), `pylearn_${userId}_${Date.now()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
-  copyAdventureAssets(userId, tmpDir);
+  copyUserUploads(userId, tmpDir);
 
   const tmpFile = path.join(tmpDir, "script.py");
   fs.writeFileSync(tmpFile, code, "utf8");
@@ -206,8 +187,8 @@ export function startPtySession(
     idleTimer,
     onOutput,
     onExit,
-    onAdventureEvent,
-    lineBuffer: "",
+    onDisplayEvent,
+    displayBuffer: "",
   };
   sessions.set(userId, session);
 
@@ -220,19 +201,8 @@ export function startPtySession(
   });
 
   shell.onExit(({ exitCode }) => {
-    if (session.lineBuffer) {
-      const clean = session.lineBuffer.replace(/\r$/, "");
-      if (clean.startsWith(ADVENTURE_MARKER)) {
-        try {
-          const jsonStr = clean.slice(ADVENTURE_MARKER.length);
-          const event = JSON.parse(jsonStr);
-          session.onAdventureEvent?.(event);
-        } catch {
-        }
-      } else if (session.lineBuffer) {
-        onOutput(session.lineBuffer);
-      }
-    }
+    // Discard any incomplete display buffer at exit
+    session.displayBuffer = "";
     clearTimeout(session.idleTimer);
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -9,6 +9,7 @@ import helpRouter from "./help";
 import adminRouter from "./admin";
 import adventureRouter from "./adventure";
 import programsRouter from "./programs";
+import promptsRouter from "./prompts";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(helpRouter);
 router.use(adminRouter);
 router.use(adventureRouter);
 router.use(programsRouter);
+router.use(promptsRouter);
 
 export default router;
