@@ -25,14 +25,12 @@ interface WorkspaceState {
   activeFileId: number | null;
   openFiles: ProjectFile[];
   unsavedChanges: Record<number, string>;
-  isOutputFullscreen: boolean;
   isAiChatOpen: boolean;
 
   setActiveFile: (id: number | null) => void;
   setOpenFiles: (files: ProjectFile[]) => void;
   updateUnsavedContent: (id: number, content: string) => void;
   clearUnsavedContent: (id: number) => void;
-  setFullscreen: (val: boolean) => void;
   toggleAiChat: () => void;
 }
 
@@ -40,7 +38,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeFileId: null,
   openFiles: [],
   unsavedChanges: loadUnsaved(),
-  isOutputFullscreen: false,
   isAiChatOpen: true,
 
   setActiveFile: (id) => set({ activeFileId: id }),
@@ -58,6 +55,5 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       saveUnsaved(next);
       return { unsavedChanges: next };
     }),
-  setFullscreen: (val) => set({ isOutputFullscreen: val }),
   toggleAiChat: () => set((state) => ({ isAiChatOpen: !state.isAiChatOpen })),
 }));

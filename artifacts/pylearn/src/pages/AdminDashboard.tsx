@@ -4,8 +4,6 @@ import { useAuth } from '@workspace/auth-web';
 import { useLocation } from 'wouter';
 import { setSessionType } from '@/lib/session-type';
 
-// Set session type before any hooks fire
-setSessionType('admin');
 import { useListStudents, useGetAiConfig, useUpdateAiConfig, useListHelpRequests, useDismissHelpRequest, useListStudentAccounts, useCreateStudentAccount, useToggleStudentPause, useDeleteStudentAccount, useUpdateStudentCredits } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -52,6 +50,7 @@ interface AiConfigForm {
 }
 
 export default function AdminDashboard() {
+  setSessionType('admin');
   const { logout, user, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 

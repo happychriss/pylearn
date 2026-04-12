@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Plotly from 'plotly.js-basic-dist-min';
 import { useAuth } from '@workspace/auth-web';
-import { Image, Maximize2, Minimize2, Trash2 } from 'lucide-react';
+import { Image, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getSessionType } from '@/lib/session-type';
 import type { DisplayMessage, AdventureState, SpriteState } from '@/hooks/use-display-events';
 
 // ---------------------------------------------------------------------------
@@ -235,8 +236,6 @@ interface UploadedImage {
 interface SceneRendererProps {
   adventureState: AdventureState;
   overrideUserId?: string;
-  isImmersive?: boolean;
-  onToggleImmersive?: () => void;
   onInput?: (data: string) => void;
 }
 
@@ -331,7 +330,7 @@ function SpriteElement({ name, pos, sx, effectiveUserId, images }: SpriteElement
   );
 }
 
-function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleImmersive, onInput }: SceneRendererProps) {
+function SceneRenderer({ adventureState, overrideUserId, onInput }: SceneRendererProps) {
   const { user } = useAuth();
   const effectiveUserId = overrideUserId || user?.id;
   const [images, setImages] = useState<UploadedImage[]>([]);
@@ -359,7 +358,10 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
       const url = overrideUserId
         ? `/api/adventure/images?userId=${encodeURIComponent(overrideUserId)}`
         : '/api/adventure/images';
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await fetch(url, {
+        credentials: 'include',
+        headers: { 'X-Session-Type': getSessionType() },
+      });
       if (res.ok) {
         const data = await res.json();
         setImages(data);
@@ -421,10 +423,10 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
   }, [adventureState.messages]);
 
   useEffect(() => {
-    if (isImmersive && adventureState.question) {
+    if (adventureState.question) {
       immersiveInputRef.current?.focus();
     }
-  }, [isImmersive, adventureState.question]);
+  }, [adventureState.question]);
 
   const handleImmersiveSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -441,16 +443,6 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
           <span className="bg-black/40 backdrop-blur-sm text-white/80 text-xs px-2.5 py-1 rounded-full border border-white/10">
             {adventureState.background}
           </span>
-        </div>
-      )}
-
-      {/* Immersive toggle */}
-      {onToggleImmersive && (
-        <div className="absolute top-3 right-3 z-10">
-          <Button variant="ghost" size="sm" onClick={onToggleImmersive}
-            className="text-[10px] h-6 w-6 p-0 bg-black/30 backdrop-blur-sm text-white/70 hover:text-white hover:bg-black/50 border border-white/10">
-            {isImmersive ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-          </Button>
         </div>
       )}
 
@@ -489,7 +481,7 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
       ))}
 
       {/* Story + Question + Input overlay */}
-      {(adventureState.messages.length > 0 || adventureState.question || (isImmersive && adventureState.background)) && (
+      {(adventureState.messages.length > 0 || adventureState.question || adventureState.background) && (
         <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-2 p-3 pb-4">
           {adventureState.messages.length > 0 && (
             <div className="rounded-xl px-4 py-3 max-h-36 overflow-y-auto space-y-1"
@@ -527,7 +519,7 @@ function SceneRenderer({ adventureState, overrideUserId, isImmersive, onToggleIm
             </div>
           )}
 
-          {isImmersive && adventureState.question && (
+          {adventureState.question && (
             <form onSubmit={handleImmersiveSubmit}>
               <div className="rounded-xl overflow-hidden"
                 style={{ background: 'rgba(10, 15, 30, 0.55)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)' }}>
@@ -559,8 +551,6 @@ interface OutputPanelProps {
   hasAdventureContent: boolean;
   isRunning?: boolean;
   overrideUserId?: string;
-  isImmersive?: boolean;
-  onToggleImmersive?: () => void;
   onInput?: (data: string) => void;
   onClear?: () => void;
 }
@@ -571,8 +561,6 @@ export function OutputPanel({
   hasAdventureContent,
   isRunning,
   overrideUserId,
-  isImmersive,
-  onToggleImmersive,
   onInput,
   onClear,
 }: OutputPanelProps) {
@@ -590,12 +578,12 @@ export function OutputPanel({
       <div className="h-full flex flex-col">
         {/* Display messages above adventure (if any) */}
         {displayMessages.length > 0 && (
-          <div className="border-b border-white/10 overflow-auto max-h-[40%]">
+          <div className="border-b border-green-100 overflow-auto max-h-[40%] bg-[#f0fdf4]">
             <div className="p-3 space-y-3">
               {displayMessages.map((msg, i) => {
                 const Renderer = getRenderer(msg.mime);
                 return (
-                  <div key={msg.id || i} className="rounded-lg overflow-hidden bg-slate-800/50 border border-white/5">
+                  <div key={msg.id || i} className="rounded-lg overflow-hidden bg-white border border-green-100 shadow-sm">
                     <Renderer data={msg.data} />
                   </div>
                 );
@@ -608,8 +596,6 @@ export function OutputPanel({
           <SceneRenderer
             adventureState={adventureState}
             overrideUserId={overrideUserId}
-            isImmersive={isImmersive}
-            onToggleImmersive={onToggleImmersive}
             onInput={onInput}
           />
         </div>
@@ -620,22 +606,22 @@ export function OutputPanel({
   // No adventure content — show display messages or empty state
   if (!hasContent) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-[#f0fdf4]">
         {isRunning ? (
-          <div className="text-center text-white/40 space-y-3">
-            <div className="w-12 h-12 mx-auto rounded-full border-2 border-white/20 border-t-green-400 animate-spin" />
-            <p className="text-base font-medium text-white/50">Running…</p>
-            <p className="text-sm max-w-xs">Output will appear here.</p>
+          <div className="text-center space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-full border-2 border-green-200 border-t-green-500 animate-spin" />
+            <p className="text-base font-medium text-green-700">Running…</p>
+            <p className="text-sm text-green-600/70 max-w-xs">Output will appear here.</p>
           </div>
         ) : (
-          <div className="text-center text-muted-foreground space-y-3">
+          <div className="text-center text-green-700/60 space-y-3">
             <Image className="w-12 h-12 mx-auto opacity-40" />
             <p className="text-base font-medium">Output</p>
             <p className="text-sm max-w-xs">
               Run your code to see charts, drawings, and rich output here.
             </p>
             <p className="text-xs opacity-50 mt-2">
-              <code className="bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">import pylearn</code>
+              <code className="bg-green-100 px-1.5 py-0.5 rounded">import pylearn</code>
             </p>
           </div>
         )}
@@ -644,15 +630,15 @@ export function OutputPanel({
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-900/50">
+    <div className="h-full flex flex-col bg-[#f0fdf4]">
       {/* Header with clear button */}
       {onClear && (
-        <div className="flex items-center justify-end px-3 py-1 border-b border-white/5">
+        <div className="flex items-center justify-end px-3 py-1 border-b border-green-200">
           <Button
             variant="ghost"
             size="sm"
             onClick={onClear}
-            className="h-6 text-xs text-white/40 hover:text-white/70"
+            className="h-6 text-xs text-green-700/50 hover:text-green-700"
           >
             <Trash2 className="w-3 h-3 mr-1" /> Clear
           </Button>
@@ -663,7 +649,7 @@ export function OutputPanel({
         {displayMessages.map((msg, i) => {
           const Renderer = getRenderer(msg.mime);
           return (
-            <div key={msg.id || i} className="rounded-lg overflow-hidden bg-slate-800/50 border border-white/5">
+            <div key={msg.id || i} className="rounded-lg overflow-hidden bg-white border border-green-100 shadow-sm">
               <Renderer data={msg.data} />
             </div>
           );

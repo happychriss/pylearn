@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '../ui/dialog';
 import { toast } from '@/hooks/use-toast';
+import { getSessionType } from '@/lib/session-type';
 
 interface UploadedImage {
   filename: string;
@@ -50,7 +51,10 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
 
   const fetchImages = async () => {
     try {
-      const res = await fetch('/api/adventure/images', { credentials: 'include' });
+      const res = await fetch('/api/adventure/images', {
+        credentials: 'include',
+        headers: { 'X-Session-Type': getSessionType() },
+      });
       if (res.ok) setImages(await res.json());
     } catch {}
   };
@@ -64,7 +68,12 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
     try {
       const formData = new FormData();
       formData.append('image', file);
-      const res = await fetch('/api/adventure/images', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetch('/api/adventure/images', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers: { 'X-Session-Type': getSessionType() },
+      });
       if (res.ok) {
         toast({ title: 'Uploaded!', description: `${file.name} is ready to use.` });
         fetchImages();
@@ -83,7 +92,11 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
   const handleDeleteImage = async (filename: string) => {
     if (!confirm(`Delete ${filename}?`)) return;
     try {
-      const res = await fetch(`/api/adventure/images/${encodeURIComponent(filename)}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch(`/api/adventure/images/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'X-Session-Type': getSessionType() },
+      });
       if (res.ok) {
         setImages(prev => prev.filter(img => img.filename !== filename));
         toast({ title: 'Deleted', description: `${filename} removed.` });

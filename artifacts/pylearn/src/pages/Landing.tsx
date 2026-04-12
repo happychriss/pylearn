@@ -8,9 +8,6 @@ import { APP_VERSION } from '@/lib/version';
 import { useGetMyProfile } from '@workspace/api-client-react';
 import { setSessionType } from '@/lib/session-type';
 
-// Landing page checks admin session by default
-setSessionType('admin');
-
 const PIN_LENGTH = 6;
 
 function PinInput({ value, onChange, onComplete, disabled }: {
@@ -98,6 +95,7 @@ function PinInput({ value, onChange, onComplete, disabled }: {
 }
 
 export default function Landing() {
+  setSessionType('admin');
   const { isAuthenticated, login, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { data: profile } = useGetMyProfile({ query: { enabled: isAuthenticated } });

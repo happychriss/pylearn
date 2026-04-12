@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { setSessionType } from '@/lib/session-type';
 
-// Set session type before any hooks fire
-setSessionType('admin');
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useListFiles, useListStudents } from '@workspace/api-client-react';
 import { EditorPanel } from '@/components/workspace/EditorPanel';
@@ -22,6 +20,7 @@ import type { Terminal as XTerm } from '@xterm/xterm';
 type ActiveTab = 'code' | 'output';
 
 export default function AdminWorkspaceView() {
+  setSessionType('admin');
   const [, params] = useRoute('/admin/student/:id');
   const studentId = params?.id;
   const [, setLocation] = useLocation();

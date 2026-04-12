@@ -82,9 +82,10 @@ export async function clearSession(
 /**
  * Get the session ID from the request.
  * Checks X-Session-Type header to determine which cookie to use:
- * - "student" → prefer sid_student cookie
- * - "admin" or unset → prefer sid cookie
- * Falls back to the other cookie if the preferred one is not present.
+ * - "student" → use sid_student cookie
+ * - "admin" or unset → try sid cookie first, fall back to sid_student
+ *   (fallback handles browser-initiated requests like <img> tags that
+ *    cannot send custom headers — students only have sid_student)
  */
 export function getSessionId(req: Request): string | undefined {
   const authHeader = req.headers["authorization"];
@@ -94,7 +95,7 @@ export function getSessionId(req: Request): string | undefined {
 
   const sessionType = req.headers["x-session-type"] as string | undefined;
   if (sessionType === "student") {
-    return req.cookies?.[STUDENT_SESSION_COOKIE] || req.cookies?.[SESSION_COOKIE];
+    return req.cookies?.[STUDENT_SESSION_COOKIE];
   }
-  return req.cookies?.[SESSION_COOKIE] || req.cookies?.[STUDENT_SESSION_COOKIE];
+  return req.cookies?.[SESSION_COOKIE] ?? req.cookies?.[STUDENT_SESSION_COOKIE];
 }

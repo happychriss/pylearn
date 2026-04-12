@@ -3,8 +3,6 @@ import { useLocation } from 'wouter';
 import { useAuth } from '@workspace/auth-web';
 import { setSessionType } from '@/lib/session-type';
 
-// Set session type before any hooks fire
-setSessionType('student');
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from '@/components/workspace/Sidebar';
 import { EditorPanel } from '@/components/workspace/EditorPanel';
@@ -15,7 +13,7 @@ import { OutputPanel } from '@/components/workspace/OutputPanel';
 import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile, useGetStudentAiConfig } from '@workspace/api-client-react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Save, Maximize2, Minimize2, Hand, MessageSquare, Code, Monitor, LogOut, Wifi, WifiOff } from 'lucide-react';
+import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { usePtySession } from '@/hooks/use-pty-session';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useDisplayEvents } from '@/hooks/use-display-events';
@@ -23,9 +21,14 @@ import { toast } from '@/hooks/use-toast';
 import { APP_VERSION } from '@/lib/version';
 import type { Terminal as XTerm } from '@xterm/xterm';
 
-type ActiveTab = 'code' | 'output';
+type FullscreenPanel = 'code' | null;
+
+// Shared panel header style — same teal/green for all panels
+const PANEL_HEADER = 'flex items-center justify-between px-3 py-2 shrink-0 bg-primary text-primary-foreground';
+const PANEL_HEADER_BTN = 'h-6 px-2 text-[11px] gap-1 text-primary-foreground/70 hover:text-primary-foreground hover:bg-white/15';
 
 export default function StudentWorkspace() {
+  setSessionType('student');
   const { user, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { data: profile, refetch: refetchProfile } = useGetMyProfile({ query: { enabled: isAuthenticated } });
@@ -39,8 +42,6 @@ export default function StudentWorkspace() {
     activeFileId,
     unsavedChanges,
     clearUnsavedContent,
-    isOutputFullscreen,
-    setFullscreen,
     isAiChatOpen,
     toggleAiChat,
     updateUnsavedContent,
@@ -48,40 +49,42 @@ export default function StudentWorkspace() {
 
   const { isRunning, runCode, sendInput, stopCode, listen } = usePtySession();
   const {
-    displayMessages, adventureState, hasNewEvent, hasDisplayContent, hasAdventureContent,
-    clearNewEvent, clearQuestion, resetState: resetDisplay, setActiveTab: setDisplayActiveTab,
+    displayMessages, adventureState, hasDisplayContent, hasAdventureContent,
+    clearQuestion, resetState: resetDisplay, setActiveTab: setDisplayActiveTab,
   } = useDisplayEvents();
+
+  // Output is always visible — suppress "new event" badge permanently
+  useEffect(() => { setDisplayActiveTab('output'); }, [setDisplayActiveTab]);
+
+  // Clear the adventure question prompt when code stops running
   const wasRunningRef = useRef(false);
   useEffect(() => {
     if (wasRunningRef.current && !isRunning) {
-      // Program just terminated — dismiss any pending ask() prompt so the input
-      // field disappears. Keep everything else (scene, sprites, messages) visible.
       clearQuestion();
     }
     wasRunningRef.current = isRunning;
   }, [isRunning, clearQuestion]);
 
-  // Auto-switch to output tab on first display event after Run is pressed
-  const autoSwitchRef = useRef(false);
-  useEffect(() => {
-    if (!autoSwitchRef.current || !hasDisplayContent) return;
-    autoSwitchRef.current = false;
-    clearNewEvent();
-    setActiveTab('output');
-    setDisplayActiveTab('output');
-    if (hasAdventureContent) setOutputImmersive(true);
-    terminalPanelRef.current?.collapse();
-  }, [hasDisplayContent]); // eslint-disable-line react-hooks/exhaustive-deps
   const [teacherViewing, setTeacherViewing] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [modeChangedWhileActive, setModeChangedWhileActive] = useState(false);
-  const [isOutputImmersive, setOutputImmersive] = useState(false);
-  const terminalPanelRef = useRef<import('react-resizable-panels').ImperativePanelHandle | null>(null);
+  // showConsole only matters when isVisualMode — starts hidden so output is clean on first display event
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleHasOutput, setConsoleHasOutput] = useState(false);
+  const [fullscreenPanel, setFullscreenPanel] = useState<FullscreenPanel>(null);
+  const [isPresenting, setIsPresenting] = useState(false);
   const [aiPanelWidth, setAiPanelWidth] = useState(320);
   const aiResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const { emit, on, onConnect, status: wsStatus } = useWebSocket('/api/ws');
   const terminalRef = useRef<XTerm | null>(null);
+  const outputPresentRef = useRef<HTMLDivElement>(null);
+
+  // Track browser fullscreen state (ESC key or other exit paths)
+  useEffect(() => {
+    const handler = () => setIsPresenting(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -105,12 +108,14 @@ export default function StudentWorkspace() {
     const cleanup = listen(
       (data) => {
         terminalRef.current?.write(data);
+        setConsoleHasOutput(true);
       },
       (exitCode) => {
         const msg = exitCode === -1
           ? '\r\n\x1b[33m[Stopped]\x1b[0m\r\n'
           : `\r\n\x1b[${exitCode === 0 ? '32' : '31'}m[Exited with code ${exitCode}]\x1b[0m\r\n`;
         terminalRef.current?.write(msg);
+        setConsoleHasOutput(true);
       }
     );
     return cleanup;
@@ -170,24 +175,6 @@ export default function StudentWorkspace() {
     window.location.href = '/';
   };
 
-  const handleTabChange = (tab: ActiveTab) => {
-    if (tab === activeTab) return;
-    if (tab === 'output') {
-      clearNewEvent();
-      // If adventure content, go immersive
-      if (hasAdventureContent) {
-        setOutputImmersive(true);
-        terminalPanelRef.current?.collapse();
-      }
-    } else {
-      // Switching away from output — restore terminal
-      setOutputImmersive(false);
-      terminalPanelRef.current?.expand();
-    }
-    setActiveTab(tab);
-    setDisplayActiveTab(tab);
-  };
-
   const handleAiPanelResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     aiResizeRef.current = { startX: e.clientX, startWidth: aiPanelWidth };
@@ -205,26 +192,11 @@ export default function StudentWorkspace() {
     window.addEventListener('mouseup', onUp);
   };
 
-  const handleToggleImmersive = () => {
-    setOutputImmersive((prev) => {
-      const next = !prev;
-      if (next) {
-        terminalPanelRef.current?.collapse();
-      } else {
-        terminalPanelRef.current?.expand();
-      }
-      return next;
-    });
-  };
-
-  const showChatPanel = isAiChatOpen && !(activeTab === 'output' && isOutputImmersive);
-
   const handleSave = () => {
     if (!activeFileId || !unsavedChanges[activeFileId]) return;
-    
-    updateFile.mutate({ 
-      id: activeFileId, 
-      data: { content: unsavedChanges[activeFileId] } 
+    updateFile.mutate({
+      id: activeFileId,
+      data: { content: unsavedChanges[activeFileId] }
     }, {
       onSuccess: () => {
         clearUnsavedContent(activeFileId);
@@ -238,8 +210,9 @@ export default function StudentWorkspace() {
     const content = activeFileId ? (unsavedChanges[activeFileId] ?? activeFile?.content ?? '') : '';
     if (!content) return;
     terminalRef.current?.clear();
-    resetDisplay();
-    autoSwitchRef.current = true;
+    setConsoleHasOutput(false);
+    setShowConsole(false); // Console starts hidden; show it explicitly when needed
+    resetDisplay();        // Clears display content → switches to console-only mode
     runCode(content);
   };
 
@@ -260,14 +233,115 @@ export default function StudentWorkspace() {
     }
   };
 
+  const handlePresent = () => {
+    outputPresentRef.current?.requestFullscreen();
+  };
+
   const activeFile = files?.find(f => f.id === activeFileId);
   const isDirty = activeFileId ? unsavedChanges[activeFileId] !== undefined : false;
   const isChatMode = aiConfig?.mode === 'chat';
   const isAiEnabled = aiConfig?.mode !== 'off';
   const aiCredits = (profile as Record<string, unknown> | undefined)?.aiCredits as number | undefined;
+  const showAiPanel = isAiEnabled && isAiChatOpen && fullscreenPanel === null;
+
+  // Visual mode: pylearn display events have arrived — show output renderer above terminal
+  const isVisualMode = hasDisplayContent;
+
+  // ── Output column ──
+  // The terminal is always mounted (never unmounted) so xterm preserves its scroll
+  // buffer even when the console sub-panel is toggled or hidden.
+  const outputColumn = (
+    <div className="h-full flex flex-col">
+
+      {/* ── Output header ── */}
+      <div className={PANEL_HEADER}>
+        <div className="flex items-center gap-1.5 text-sm font-medium">
+          <Monitor className="w-4 h-4" />
+          <span>Output</span>
+          {isRunning && <span className="text-green-300 animate-pulse text-xs ml-1">● Running</span>}
+        </div>
+        {/* Buttons only appear when there is visual output to act on */}
+        {isVisualMode && (
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm"
+              onClick={() => setShowConsole(prev => !prev)}
+              className={PANEL_HEADER_BTN}>
+              {showConsole
+                ? <><ChevronDown className="w-3 h-3" /> Hide console</>
+                : <><ChevronUp className="w-3 h-3" /> Show console</>
+              }
+            </Button>
+            <Button variant="ghost" size="sm"
+              onClick={handlePresent}
+              className={PANEL_HEADER_BTN}>
+              <Maximize2 className="w-3 h-3" /> Present
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Content area ── */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+
+        {/* Visual output renderer — only shown when pylearn events have arrived */}
+        {isVisualMode && (
+          <div ref={outputPresentRef} className="relative flex-1 overflow-hidden min-h-0">
+            <OutputPanel
+              displayMessages={displayMessages}
+              adventureState={adventureState}
+              hasAdventureContent={hasAdventureContent}
+              isRunning={isRunning}
+              onInput={sendInput}
+              onClear={resetDisplay}
+            />
+            {/* Exit button — shown only during browser fullscreen (ESC also works) */}
+            {isPresenting && (
+              <button
+                onClick={() => document.exitFullscreen()}
+                className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white bg-black/40 hover:bg-black/60 border border-white/20 backdrop-blur-sm transition-colors"
+              >
+                <Minimize2 className="w-4 h-4" /> Exit
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Console sub-label — thin bar between output and terminal in visual+console mode */}
+        {isVisualMode && showConsole && (
+          <div className="px-3 py-1 flex items-center gap-1.5 shrink-0 bg-primary/80 text-primary-foreground/80 text-xs font-medium">
+            <TerminalIcon className="w-3 h-3" />
+            Console
+          </div>
+        )}
+
+        {/* Terminal — always mounted; height controlled by mode so xterm state is preserved */}
+        <div className={`relative bg-[#f0fdf4] ${
+          !isVisualMode
+            ? 'flex-1'                  // console-only: fills entire column
+            : showConsole
+              ? 'h-40 shrink-0'         // visual + console visible: fixed strip
+              : 'h-0 overflow-hidden'   // visual + console hidden: collapsed
+        }`}>
+          {/* Empty state — only in console-only mode before any output */}
+          {!isVisualMode && !consoleHasOutput && !isRunning && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6 pointer-events-none">
+              <TerminalIcon className="w-10 h-10 text-green-400" />
+              <p className="text-sm font-medium text-green-700">Console is empty</p>
+              <p className="text-xs text-green-600/70 max-w-[220px] leading-relaxed">
+                When your code uses <code className="bg-green-100 px-1 rounded">print()</code>, the text appears here.
+              </p>
+            </div>
+          )}
+          <Terminal terminalRef={terminalRef} onInput={sendInput} />
+        </div>
+
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-dvh w-full flex flex-col bg-background overflow-hidden font-sans">
+      {/* ── App header ── */}
       <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 shrink-0 shadow-sm relative z-10">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -297,49 +371,8 @@ export default function StudentWorkspace() {
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center gap-2">
-          {!isChatMode && (
-            <>
-              {activeFile && (
-                <span className="text-sm text-muted-foreground mr-4">
-                  {activeFile.filename} {isDirty && '*'}
-                </span>
-              )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSave}
-                disabled={!isDirty || updateFile.isPending}
-                className="rounded-xl"
-              >
-                <Save className="w-4 h-4 mr-2" /> Save
-              </Button>
-
-              {isRunning ? (
-                <Button
-                  onClick={stopCode}
-                  size="sm"
-                  className="rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
-                >
-                  <Square className="w-4 h-4 mr-2" /> Stop
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleRun}
-                  disabled={!activeFileId}
-                  size="sm"
-                  className="rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-600/20"
-                >
-                  <Play className="w-4 h-4 mr-2" /> Run
-                </Button>
-              )}
-
-              <div className="w-px h-6 bg-border mx-2" />
-            </>
-          )}
-
           <Button
             variant="outline"
             size="sm"
@@ -375,126 +408,118 @@ export default function StudentWorkspace() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex pb-2">
         {isChatMode ? (
-          /* ---- Chat Mode Layout ---- */
-          <>
-            <div className="flex-1 overflow-hidden">
-              <PanelGroup direction="horizontal">
-                <Panel defaultSize={15} minSize={10} maxSize={25}>
-                  <Sidebar
-                    aiMode="chat"
-                    onPromptSelect={(content) => setPendingPrompt(content)}
-                  />
-                </Panel>
-                <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
-                <Panel defaultSize={85}>
-                  <AiChatPanel
-                    credits={aiCredits ?? 0}
-                    onCreditUsed={() => refetchProfile()}
-                    initialPrompt={pendingPrompt ?? undefined}
-                    onPromptConsumed={() => setPendingPrompt(null)}
-                  />
-                </Panel>
-              </PanelGroup>
-            </div>
-          </>
+          /* ── Chat Mode Layout ── */
+          <div className="flex-1 overflow-hidden">
+            <PanelGroup direction="horizontal">
+              <Panel defaultSize={15} minSize={10} maxSize={25}>
+                <Sidebar
+                  aiMode="chat"
+                  onPromptSelect={(content) => setPendingPrompt(content)}
+                />
+              </Panel>
+              <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+              <Panel defaultSize={85}>
+                <AiChatPanel
+                  credits={aiCredits ?? 0}
+                  onCreditUsed={() => refetchProfile()}
+                  initialPrompt={pendingPrompt ?? undefined}
+                  onPromptConsumed={() => setPendingPrompt(null)}
+                />
+              </Panel>
+            </PanelGroup>
+          </div>
         ) : (
-          /* ---- Normal Coding Layout ---- */
+          /* ── Normal Coding Layout: Sidebar | Code | Output ── */
           <>
             <div className="flex-1 overflow-hidden">
               <PanelGroup direction="horizontal">
+                {/* Sidebar */}
                 <Panel defaultSize={15} minSize={10} maxSize={25}>
-                  <Sidebar onFileSelect={() => handleTabChange('code')} aiMode={aiConfig?.mode} />
+                  <Sidebar onFileSelect={() => {}} aiMode={aiConfig?.mode} />
                 </Panel>
 
                 <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
 
+                {/* Main: Code | Output split */}
                 <Panel defaultSize={85}>
-                  <PanelGroup direction="vertical">
-                    <Panel defaultSize={65}>
-                      <div className="h-full flex flex-col">
-                        <div className="flex items-center border-b border-border bg-muted/30 shrink-0">
-                          <button
-                            onClick={() => handleTabChange('code')}
-                            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                              activeTab === 'code'
-                                ? 'border-primary text-primary bg-background'
-                                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                            }`}
-                          >
-                            <Code className="w-4 h-4" />
-                            Source Code
-                          </button>
-                          <button
-                            onClick={() => handleTabChange('output')}
-                            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 relative ${
-                              activeTab === 'output'
-                                ? 'border-primary text-primary bg-background'
-                                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                            }`}
-                          >
-                            <Monitor className="w-4 h-4" />
-                            Output
-                            {isRunning && <span className="text-green-500 animate-pulse">●</span>}
-                            {hasNewEvent && activeTab !== 'output' && (
-                              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  <PanelGroup direction="horizontal">
+
+                    {/* Code Editor — hidden when code is fullscreened */}
+                    <Panel id="code-panel" defaultSize={fullscreenPanel === 'code' ? 100 : 50} minSize={25}>
+                      <div className="h-full flex flex-col bg-card">
+                        <div className={PANEL_HEADER}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Code className="w-4 h-4 shrink-0" />
+                            <span className="text-sm font-medium">Source Code</span>
+                            {activeFile && (
+                              <span className="text-primary-foreground/60 text-xs truncate">
+                                {activeFile.filename}{isDirty && ' •'}
+                              </span>
                             )}
-                          </button>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            {!isChatMode && (
+                              <>
+                                <Button variant="ghost" size="sm"
+                                  onClick={handleSave}
+                                  disabled={!isDirty || updateFile.isPending}
+                                  className={PANEL_HEADER_BTN}>
+                                  <Save className="w-3 h-3" /> Save
+                                </Button>
+                                {isRunning ? (
+                                  <Button size="sm" onClick={stopCode}
+                                    className="h-6 px-2 text-[11px] gap-1 bg-red-500 hover:bg-red-600 text-white border-0">
+                                    <Square className="w-3 h-3" /> Stop
+                                  </Button>
+                                ) : (
+                                  <Button size="sm" onClick={handleRun}
+                                    disabled={!activeFileId}
+                                    className="h-6 px-2 text-[11px] gap-1 bg-green-500 hover:bg-green-600 text-white border-0">
+                                    <Play className="w-3 h-3" /> Run
+                                  </Button>
+                                )}
+                                <div className="w-px h-4 bg-white/20 mx-0.5" />
+                              </>
+                            )}
+                            {fullscreenPanel === 'code' ? (
+                              <Button variant="ghost" size="sm" onClick={() => setFullscreenPanel(null)}
+                                className={PANEL_HEADER_BTN}>
+                                <Minimize2 className="w-3 h-3" /> Exit full screen
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="sm" onClick={() => setFullscreenPanel('code')}
+                                className={PANEL_HEADER_BTN}>
+                                <Maximize2 className="w-3 h-3" /> Full screen
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 overflow-hidden relative">
-                          <div className={`absolute inset-0 ${activeTab === 'code' ? '' : 'invisible'}`}>
-                            <EditorPanel onContentChange={handleEditorChange} />
-                          </div>
-                          <div className={`absolute inset-0 ${activeTab === 'output' ? '' : 'invisible'}`}>
-                            <OutputPanel
-                              displayMessages={displayMessages}
-                              adventureState={adventureState}
-                              hasAdventureContent={hasAdventureContent}
-                              isRunning={isRunning}
-                              isImmersive={isOutputImmersive}
-                              onToggleImmersive={handleToggleImmersive}
-                              onInput={sendInput}
-                              onClear={resetDisplay}
-                            />
-                          </div>
+                        <div className="flex-1 overflow-hidden">
+                          <EditorPanel onContentChange={handleEditorChange} />
                         </div>
                       </div>
                     </Panel>
 
-                    <PanelResizeHandle className={`h-1 bg-border hover:bg-primary/50 transition-colors ${isOutputImmersive && activeTab === 'output' ? 'hidden' : ''}`} />
+                    {fullscreenPanel === null && (
+                      <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                    )}
 
-                    <Panel
-                      ref={terminalPanelRef}
-                      defaultSize={35}
-                      minSize={15}
-                      collapsible
-                      collapsedSize={0}
-                      className={`${isOutputFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}
-                    >
-                      <div className="h-full flex flex-col bg-card border-t border-border">
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-                          <span className="text-sm font-medium text-muted-foreground">
-                            Terminal {isRunning && <span className="text-green-500 animate-pulse">● Running</span>}
-                          </span>
-                          <Button variant="ghost" size="icon" onClick={() => setFullscreen(!isOutputFullscreen)} className="w-6 h-6">
-                            {isOutputFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                          </Button>
-                        </div>
-                        <div className="flex-1 overflow-hidden bg-[#0f172a]">
-                          <Terminal
-                            terminalRef={terminalRef}
-                            onInput={sendInput}
-                          />
-                        </div>
-                        <div className="h-3 bg-card shrink-0" />
-                      </div>
-                    </Panel>
+                    {/* Output column — hidden when code is fullscreened */}
+                    {fullscreenPanel !== 'code' && (
+                      <Panel id="output-column" defaultSize={50} minSize={20}>
+                        {outputColumn}
+                      </Panel>
+                    )}
+
                   </PanelGroup>
                 </Panel>
               </PanelGroup>
             </div>
-            {isAiEnabled && isAiChatOpen && showChatPanel && (
+
+            {/* AI Panel */}
+            {showAiPanel && (
               <div className="flex shrink-0">
                 <div
                   className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize shrink-0"
