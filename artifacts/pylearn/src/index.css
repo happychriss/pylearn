@@ -139,15 +139,6 @@
   @apply bg-muted-foreground/50;
 }
 
-/* Adventure Panel — new message flash */
-@keyframes adventure-msg-bold {
-  0%, 65% { font-weight: 700; }
-  100%     { font-weight: 400; }
-}
-.adventure-msg-new {
-  animation: adventure-msg-bold 1.6s ease forwards;
-}
-
 /* Code Editor Diff Styles */
 .diff-added {
   @apply bg-green-500/15 text-green-700 dark:text-green-300;

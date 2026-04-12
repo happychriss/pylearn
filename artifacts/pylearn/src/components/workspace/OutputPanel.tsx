@@ -334,8 +334,6 @@ function SceneRenderer({ adventureState, overrideUserId, onInput }: SceneRendere
   const { user } = useAuth();
   const effectiveUserId = overrideUserId || user?.id;
   const [images, setImages] = useState<UploadedImage[]>([]);
-  const [newMsgIndices, setNewMsgIndices] = useState<Set<number>>(new Set());
-  const prevMsgCountRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: VIRTUAL_SIZE, height: VIRTUAL_SIZE });
 
@@ -373,21 +371,6 @@ function SceneRenderer({ adventureState, overrideUserId, onInput }: SceneRendere
     fetchImages();
   }, [adventureState.background]);
 
-  // Track newly-arrived messages for the bold animation
-  useEffect(() => {
-    const curr = adventureState.messages.length;
-    const prev = prevMsgCountRef.current;
-    if (curr > prev) {
-      const added = new Set<number>();
-      for (let i = prev; i < curr; i++) added.add(i);
-      setNewMsgIndices(s => new Set([...s, ...added]));
-    } else if (curr < prev) {
-      // Scene change cleared messages — reset
-      setNewMsgIndices(new Set());
-    }
-    prevMsgCountRef.current = curr;
-  }, [adventureState.messages.length]);
-
   const getBackgroundStyle = (): React.CSSProperties => {
     const bg = adventureState.background;
     if (!bg) return { background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)' };
@@ -415,12 +398,19 @@ function SceneRenderer({ adventureState, overrideUserId, onInput }: SceneRendere
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const [msgFadeTop, setMsgFadeTop] = useState(false);
   const immersiveInputRef = useRef<HTMLInputElement>(null);
   const [inputValue, setInputValue] = useState('');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [adventureState.messages]);
+
+  // Clear fade when messages are reset (scene change)
+  useEffect(() => {
+    if (adventureState.messages.length === 0) setMsgFadeTop(false);
+  }, [adventureState.messages.length]);
 
   useEffect(() => {
     if (adventureState.question) {
@@ -437,8 +427,8 @@ function SceneRenderer({ adventureState, overrideUserId, onInput }: SceneRendere
 
   return (
     <div ref={containerRef} className="h-full relative overflow-hidden" style={getBackgroundStyle()}>
-      {/* Background label */}
-      {adventureState.background && (
+      {/* Background / scene label — top-left badge, hidden once story messages appear */}
+      {adventureState.background && adventureState.messages.length === 0 && (
         <div className="absolute top-3 left-3 z-10">
           <span className="bg-black/40 backdrop-blur-sm text-white/80 text-xs px-2.5 py-1 rounded-full border border-white/10">
             {adventureState.background}
@@ -480,61 +470,71 @@ function SceneRenderer({ adventureState, overrideUserId, onInput }: SceneRendere
         </div>
       ))}
 
-      {/* Story + Question + Input overlay */}
-      {(adventureState.messages.length > 0 || adventureState.question || adventureState.background) && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-2 p-3 pb-4">
-          {adventureState.messages.length > 0 && (
-            <div className="rounded-xl px-4 py-3 max-h-36 overflow-y-auto space-y-1"
-              style={{ background: 'rgba(10, 15, 30, 0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              {adventureState.messages.map((msg, i) => (
-                <p
-                  key={i}
-                  className={`leading-relaxed${i > 0 ? ' mt-1.5' : ''}${newMsgIndices.has(i) ? ' adventure-msg-new' : ''}`}
-                  style={{
-                    fontSize: msg.size ? `${msg.size}px` : '1rem',
-                    color: msg.color ?? 'rgba(255,255,255,0.9)',
-                    background: msg.background ?? undefined,
-                    padding: msg.background ? '2px 6px' : undefined,
-                    borderRadius: msg.background ? '4px' : undefined,
-                  }}
-                >{msg.text}</p>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-
-          {adventureState.question && (
-            <div className="rounded-xl px-4 py-3"
-              style={{
-                background: adventureState.question.background ?? 'rgba(30, 60, 100, 0.60)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(100,160,255,0.2)',
-              }}>
-              <p className="leading-relaxed"
+      {/* Story messages (say) — top overlay, scrolls to latest */}
+      {adventureState.messages.length > 0 && (
+        <div className="absolute top-0 left-0 right-0 z-20 p-3">
+          <div
+            ref={messagesScrollRef}
+            className="rounded-xl px-4 py-3 max-h-48 overflow-y-auto space-y-1"
+            onScroll={() => setMsgFadeTop((messagesScrollRef.current?.scrollTop ?? 0) > 0)}
+            style={{
+              background: 'rgba(10, 15, 30, 0.65)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              ...(msgFadeTop && {
+                maskImage: 'linear-gradient(to top, black 75%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to top, black 75%, transparent 100%)',
+              }),
+            }}
+          >
+            {adventureState.messages.map((msg, i) => (
+              <p
+                key={i}
+                className={`leading-relaxed${i > 0 ? ' mt-1.5' : ''}`}
                 style={{
-                  fontSize: adventureState.question.size ? `${adventureState.question.size}px` : '1rem',
-                  color: adventureState.question.color ?? '#bfdbfe',
+                  fontSize: msg.size ? `${msg.size}px` : '1rem',
+                  color: msg.color ?? 'rgba(255,255,255,0.9)',
+                  background: msg.background ?? undefined,
+                  padding: msg.background ? '2px 6px' : undefined,
+                  borderRadius: msg.background ? '4px' : undefined,
                 }}
-              >{adventureState.question.text}</p>
-            </div>
-          )}
+              >{msg.text}</p>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+      )}
 
-          {adventureState.question && (
-            <form onSubmit={handleImmersiveSubmit}>
-              <div className="rounded-xl overflow-hidden"
-                style={{ background: 'rgba(10, 15, 30, 0.55)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)' }}>
-                <input
-                  ref={immersiveInputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Type your answer..."
-                  className="w-full bg-transparent px-4 py-2.5 text-sm text-white/90 placeholder:text-white/30 outline-none"
-                  autoComplete="off"
-                />
-              </div>
-            </form>
-          )}
+      {/* Question + Input — bottom overlay */}
+      {adventureState.question && (
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col gap-2 p-3 pb-4">
+          <div className="rounded-xl px-4 py-3"
+            style={{
+              background: adventureState.question.background ?? 'rgba(30, 60, 100, 0.60)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(100,160,255,0.2)',
+            }}>
+            <p className="leading-relaxed"
+              style={{
+                fontSize: adventureState.question.size ? `${adventureState.question.size}px` : '1rem',
+                color: adventureState.question.color ?? '#bfdbfe',
+              }}
+            >{adventureState.question.text}</p>
+          </div>
+          <form onSubmit={handleImmersiveSubmit}>
+            <div className="rounded-xl overflow-hidden"
+              style={{ background: 'rgba(10, 15, 30, 0.55)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+              <input
+                ref={immersiveInputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Type your answer..."
+                className="w-full bg-transparent px-4 py-2.5 text-sm text-white/90 placeholder:text-white/30 outline-none"
+                autoComplete="off"
+              />
+            </div>
+          </form>
         </div>
       )}
     </div>
