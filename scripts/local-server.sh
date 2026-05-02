@@ -66,11 +66,19 @@ _wait_port_free() {
 }
 
 _ensure_postgres() {
-  if ! pg_isready -q 2>/dev/null; then
-    echo "⚠ PostgreSQL does not appear to be running."
-    echo "  Start it with: sudo pg_ctlcluster 17 main start"
-    return 1
+  if pg_isready -q 2>/dev/null; then
+    return 0
   fi
+  echo "PostgreSQL not running — starting…"
+  if sudo pg_ctlcluster 17 main start 2>/dev/null; then
+    sleep 1
+    if pg_isready -q 2>/dev/null; then
+      echo "PostgreSQL started."
+      return 0
+    fi
+  fi
+  echo "✗ Failed to start PostgreSQL. Run manually: sudo pg_ctlcluster 17 main start"
+  return 1
 }
 
 # ---- commands ----

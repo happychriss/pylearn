@@ -6,7 +6,19 @@
 set -euo pipefail
 
 APP_NAME="pylearn"
+DB_APP_NAME="pylearn-db"
+DB_MACHINE_ID="286d552a530328"
 export PATH="$HOME/.fly/bin:$PATH"
+
+# --- load local secrets (gitignored) ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_LOCAL="$SCRIPT_DIR/../.env.local"
+if [[ -f "$ENV_LOCAL" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_LOCAL"
+  set +a
+fi
 
 # ---- helpers ----
 
@@ -16,7 +28,7 @@ _check_fly() {
     return 1
   fi
   if ! fly auth whoami &>/dev/null; then
-    echo "✗ Not logged in to Fly.io. Run: fly auth login"
+    echo "✗ Not logged in to Fly.io. Set FLY_API_TOKEN in .env.local or run: fly auth login"
     return 1
   fi
 }
@@ -44,6 +56,29 @@ _get_machine_id() {
 
 _get_machine_state() {
   _fly_field state
+}
+
+_ensure_db_machine() {
+  local db_state
+  db_state=$(fly machines list --app "$DB_APP_NAME" --json 2>/dev/null \
+    | python3 -c "import sys,json; m=json.load(sys.stdin); print(m[0]['state'] if m else 'unknown')" 2>/dev/null)
+  if [[ "$db_state" == "started" ]]; then
+    return 0
+  fi
+  echo "DB machine is $db_state — starting $DB_APP_NAME…"
+  fly machine start "$DB_MACHINE_ID" --app "$DB_APP_NAME" 2>&1
+  # wait up to 20s for postgres to accept connections
+  for _ in {1..10}; do
+    sleep 2
+    local s
+    s=$(fly machines list --app "$DB_APP_NAME" --json 2>/dev/null \
+      | python3 -c "import sys,json; m=json.load(sys.stdin); print(m[0]['state'] if m else '')" 2>/dev/null)
+    if [[ "$s" == "started" ]]; then
+      echo "DB machine started."
+      return 0
+    fi
+  done
+  echo "⚠ DB machine did not reach started state — continuing anyway."
 }
 
 # ---- commands ----
@@ -84,6 +119,7 @@ do_status() {
 
 do_start() {
   _check_fly || return 1
+  _ensure_db_machine
   local mid
   mid=$(_get_machine_id)
   local state
@@ -165,6 +201,7 @@ do_stop() {
 
 do_deploy() {
   _check_fly || return 1
+  _ensure_db_machine
   echo "Deploying to Fly.io…"
   local script_dir
   script_dir="$(cd "$(dirname "$0")" && pwd)"
