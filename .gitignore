@@ -58,3 +58,4 @@ attached_assets/
 .env
 .env.*
 !.env.example
+.gitnexus
