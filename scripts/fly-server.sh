@@ -59,6 +59,9 @@ _get_machine_state() {
 }
 
 _ensure_db_machine() {
+  # Always ensure DB autostart is on so it wakes automatically with the app
+  fly machine update "$DB_MACHINE_ID" --app "$DB_APP_NAME" --autostart=true --yes 2>&1 | grep -v "^Monitor" || true
+
   local db_state
   db_state=$(fly machines list --app "$DB_APP_NAME" --json 2>/dev/null \
     | python3 -c "import sys,json; m=json.load(sys.stdin); print(m[0]['state'] if m else 'unknown')" 2>/dev/null)
