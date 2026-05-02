@@ -42,7 +42,7 @@ const SUGGESTION_INSTRUCTION = `
 ---
 ## Code Change Format (system — do not modify)
 
-When suggesting code changes, end your response with exactly this JSON block:
+When suggesting code changes, end your response with exactly this block:
 
 ---SUGGESTION---
 {
@@ -53,15 +53,27 @@ When suggesting code changes, end your response with exactly this JSON block:
 }
 ---END_SUGGESTION---
 
-Rules:
-1. old_text must be copied EXACTLY from the current file — same indentation, spacing, and comments. The system finds your change by locating this exact text.
-2. old_text must be unique in the file. If it could match multiple places, include more surrounding lines to make it unambiguous.
-3. new_text is the full replacement for old_text. To insert a line, include the anchor line in old_text and the anchor plus the new line in new_text.
-4. Use multiple objects in the changes array for edits in separate locations (e.g. a new import AND a new statement).
-5. Do NOT show modified code in a \`\`\`python block — the suggestion block is the only place for code.
-6. Do NOT wrap the suggestion block in triple backticks. Use the literal ---SUGGESTION--- and ---END_SUGGESTION--- markers exactly as shown.
-7. Emit at most ONE suggestion block per response.
-8. For explanations with no code change, omit the block entirely.`;
+CRITICAL JSON rules — the block is machine-parsed. Any violation breaks the apply button for the student:
+1. The content between ---SUGGESTION--- and ---END_SUGGESTION--- must be valid JSON. No exceptions.
+2. No comments inside the JSON — not // and not /* */. Comments are not valid JSON.
+3. No trailing commas after the last item in an array or object.
+4. All strings must be properly quoted with double quotes. Escape internal double quotes as \\".
+5. Newlines inside string values must be written as \\n, not literal line breaks.
+
+Content rules:
+6. old_text must be copied EXACTLY from the current file — same indentation, spacing, and comments.
+7. old_text must be unique in the file. Include more surrounding lines if needed to make it unambiguous.
+8. new_text is the full replacement for old_text. To insert a line, include the anchor line in both old_text and new_text.
+9. Use multiple objects in the changes array for edits in separate locations (e.g. a new import AND a new statement).
+Import rules:
+10. Before suggesting any pylearn function, check the current file's imports. If the required import is missing, add it as the FIRST change in the changes array.
+    - For pylearn functions used with the module prefix (e.g. pylearn.show): add \`import pylearn\` if not present.
+    - For adventure functions called directly (scene, say, ask, show_sprite, move_sprite, show_text, clear_text): add the specific names to a \`from pylearn import ...\` line. If that line already exists, extend it rather than adding a duplicate.
+    - For \`time.sleep\` or any other stdlib module: add the import if missing.
+11. Do NOT show modified code in a \`\`\`python block — the suggestion block is the only place for code.
+12. Do NOT wrap the suggestion block in triple backticks. Use the literal ---SUGGESTION--- and ---END_SUGGESTION--- markers exactly as shown.
+13. Emit at most ONE suggestion block per response.
+14. For explanations with no code change, omit the block entirely.`;
 
 // What the AI returns
 interface RawChange {
@@ -114,6 +126,11 @@ function applyChanges(
   return { ok: true, result: content };
 }
 
+/** Strip // line comments from JSON text (outside of string values). */
+function sanitizeJson(str: string): string {
+  return str.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*/g, (m, s) => s ?? '');
+}
+
 /** Parse the AI response and resolve it to a final SuggestionPayload (with computed newContent),
  *  or return an error string, or null if no suggestion was present at all. */
 function extractSuggestion(
@@ -122,7 +139,7 @@ function extractSuggestion(
   filename: string,
 ): { text: string; suggestion: SuggestionPayload | null; error?: string } {
   const tryResolve = (jsonStr: string, cleanText: string) => {
-    const raw = JSON.parse(jsonStr) as RawSuggestionPayload;
+    const raw = JSON.parse(sanitizeJson(jsonStr)) as RawSuggestionPayload;
     if (!raw.explanation) return null;
 
     // Preferred: changes array
@@ -169,7 +186,10 @@ function extractSuggestion(
         if ('error' in resolved) return { text: resolved.cleanText, suggestion: null, error: resolved.error };
         return { text: resolved.cleanText, suggestion: resolved.suggestion! };
       }
-    } catch { /* fall through */ }
+    } catch {
+      // JSON invalid even after sanitization — still strip the raw block from displayed text
+      return { text: cleanText, suggestion: null, error: 'Suggestion JSON could not be parsed' };
+    }
   }
 
   // Fallback: ```suggestion fence

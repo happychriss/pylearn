@@ -8,6 +8,7 @@ import { Send, Bot, User, Sparkles } from 'lucide-react';
 import { useAcceptSuggestion, useRejectSuggestion } from '@workspace/api-client-react';
 import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 
 interface AiPanelProps {
   credits: number;
@@ -101,11 +102,29 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
                   <div className="flex-1 min-w-0 flex flex-col">
                     {msg.content && (
                       <div className={`p-3 rounded-2xl text-sm ${
-                        msg.role === 'user' 
-                          ? 'bg-primary text-primary-foreground rounded-tr-sm' 
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground rounded-tr-sm'
                           : 'bg-muted text-foreground rounded-tl-sm'
                       }`}>
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                        {msg.role === 'user' ? (
+                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                        ) : (
+                          <ReactMarkdown
+                            components={{
+                              code: ({ children, className }) => {
+                                const isBlock = className?.startsWith('language-');
+                                return isBlock
+                                  ? <pre className="bg-background/60 rounded p-2 mt-1 mb-1 overflow-x-auto text-xs font-mono"><code>{children}</code></pre>
+                                  : <code className="bg-background/60 rounded px-1 font-mono text-xs">{children}</code>;
+                              },
+                              p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-1 space-y-0.5">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-1 space-y-0.5">{children}</ol>,
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        )}
                       </div>
                     )}
                     
