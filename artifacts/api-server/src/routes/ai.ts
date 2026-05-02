@@ -58,10 +58,14 @@ CRITICAL JSON rules — the block is machine-parsed. Any violation breaks the ap
 2. No comments inside the JSON — not // and not /* */. Comments are not valid JSON.
 3. No trailing commas after the last item in an array or object.
 4. All strings must be properly quoted with double quotes. Escape internal double quotes as \\".
+   Example — Python code containing a quote:
+   Python line:  print("Hello")
+   In JSON:      "old_text": "print(\"Hello\")"
 5. Newlines inside string values must be written as \\n, not literal line breaks.
 
 Content rules:
 6. old_text must be copied EXACTLY from the current file — same indentation, spacing, and comments.
+   IMPORTANT: Copy old_text verbatim, including any bugs or syntax errors in the original. Do NOT fix or improve old_text — it must match the broken code character-for-character so the system can locate it.
 7. old_text must be unique in the file. Include more surrounding lines if needed to make it unambiguous.
 8. new_text is the full replacement for old_text. To insert a line, include the anchor line in both old_text and new_text.
 9. Use multiple objects in the changes array for edits in separate locations (e.g. a new import AND a new statement).
@@ -95,32 +99,75 @@ interface SuggestionPayload {
   explanation: string;
 }
 
+/** Try to locate oldText in content using progressively looser matching.
+ *  Returns the index and matched length, or null. */
+function findMatch(content: string, oldText: string): { index: number; length: number } | null {
+  // 1. Exact match
+  const exact = content.indexOf(oldText);
+  if (exact !== -1) {
+    const second = content.indexOf(oldText, exact + 1);
+    if (second !== -1) return null; // ambiguous
+    return { index: exact, length: oldText.length };
+  }
+
+  // 2. Normalised match: collapse runs of whitespace on each line, case-insensitive
+  const normalise = (s: string) =>
+    s.split('\n').map(l => l.trim().replace(/\s+/g, ' ').toLowerCase()).join('\n');
+
+  const normContent = normalise(content);
+  const normOld = normalise(oldText);
+  const normIdx = normContent.indexOf(normOld);
+  if (normIdx === -1) return null;
+
+  // Map normalised index back to original content
+  // Walk both strings together to find the real start/end positions
+  let ci = 0; // original content index
+  let ni = 0; // normalised content index
+  let realStart = -1;
+  let realEnd = -1;
+
+  while (ci < content.length && ni <= normContent.length) {
+    if (ni === normIdx) realStart = ci;
+    if (ni === normIdx + normOld.length) { realEnd = ci; break; }
+    // Advance one char in both (normalise() maps 1:1 for non-whitespace,
+    // but collapses whitespace runs — advance original past any whitespace run)
+    if (content[ci] === '\n') { ci++; ni++; }
+    else if (/\s/.test(content[ci])) {
+      // skip whitespace run in original; normalised already has single space or nothing
+      while (ci < content.length && /\s/.test(content[ci]) && content[ci] !== '\n') ci++;
+      if (ni < normContent.length && normContent[ni] === ' ') ni++;
+    } else { ci++; ni++; }
+  }
+
+  if (realStart === -1 || realEnd === -1) return null;
+
+  // Ambiguity check on the real slice
+  const realSlice = content.slice(realStart, realEnd);
+  const second = content.indexOf(realSlice, realStart + 1);
+  if (second !== -1 && second !== realStart) return null;
+
+  return { index: realStart, length: realEnd - realStart };
+}
+
 /** Apply a list of old_text → new_text changes to fileContent.
  *  Each old_text must match exactly once. Returns the patched content or an error. */
 function applyChanges(
   fileContent: string,
   changes: RawChange[],
 ): { ok: true; result: string } | { ok: false; error: string } {
-  // Normalise line endings once up front
   let content = fileContent.replace(/\r\n/g, '\n');
 
   for (const change of changes) {
     const oldText = change.old_text.replace(/\r\n/g, '\n');
     const newText = change.new_text.replace(/\r\n/g, '\n');
 
-    const firstIdx = content.indexOf(oldText);
-    if (firstIdx === -1) {
+    const match = findMatch(content, oldText);
+    if (!match) {
       const preview = oldText.split('\n')[0].trim().slice(0, 60);
       return { ok: false, error: `Could not find: "${preview}"` };
     }
 
-    const secondIdx = content.indexOf(oldText, firstIdx + 1);
-    if (secondIdx !== -1) {
-      const preview = oldText.split('\n')[0].trim().slice(0, 60);
-      return { ok: false, error: `Ambiguous match (appears more than once): "${preview}"` };
-    }
-
-    content = content.slice(0, firstIdx) + newText + content.slice(firstIdx + oldText.length);
+    content = content.slice(0, match.index) + newText + content.slice(match.index + match.length);
   }
 
   return { ok: true, result: content };
@@ -183,11 +230,16 @@ function extractSuggestion(
     try {
       const resolved = tryResolve(jsonStr, cleanText);
       if (resolved) {
-        if ('error' in resolved) return { text: resolved.cleanText, suggestion: null, error: resolved.error };
+        if ('error' in resolved) {
+          console.error('[AI suggestion] applyChanges failed:', resolved.error);
+          console.error('[AI suggestion] raw JSON:\n', jsonStr);
+          return { text: resolved.cleanText, suggestion: null, error: resolved.error };
+        }
         return { text: resolved.cleanText, suggestion: resolved.suggestion! };
       }
-    } catch {
-      // JSON invalid even after sanitization — still strip the raw block from displayed text
+    } catch (e) {
+      console.error('[AI suggestion] JSON parse failed:', e instanceof Error ? e.message : e);
+      console.error('[AI suggestion] raw JSON:\n', jsonStr);
       return { text: cleanText, suggestion: null, error: 'Suggestion JSON could not be parsed' };
     }
   }
@@ -328,8 +380,8 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  // Credit check for chat mode (students only)
-  if (config.mode === "chat") {
+  // Credit check — all modes, students only
+  {
     const [currentUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
     if (currentUser?.role === "student") {
       const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, req.user.id));
@@ -337,7 +389,6 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
         res.status(403).json({ error: "No credits remaining. Contact your teacher for more credits." });
         return;
       }
-      // Decrement credit
       if (account) {
         await db
           .update(studentAccountsTable)
@@ -404,14 +455,17 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
       res
     );
 
-    const fileContext = parsed.data.fileContext ?? '';
-    const filename = parsed.data.filename ?? 'file.py';
-    const { text, suggestion, error } = extractSuggestion(fullContent, fileContext, filename);
-    if (suggestion) {
-      res.write(`data: ${JSON.stringify({ type: "suggestion", suggestion, cleanText: text })}\n\n`);
-    } else if (error) {
-      // old_text didn't match — show the explanation but no apply button
-      res.write(`data: ${JSON.stringify({ type: "suggestion", suggestion: null, cleanText: `${text}\n\n⚠ Could not apply automatically: ${error}` })}\n\n`);
+    // Suggestion extraction only applies to agent mode.
+    // In suggestion mode the AI returns plain code blocks for copy/paste — no diff widget.
+    if (config.mode === "agent") {
+      const fileContext = parsed.data.fileContext ?? '';
+      const filename = parsed.data.filename ?? 'file.py';
+      const { text, suggestion, error } = extractSuggestion(fullContent, fileContext, filename);
+      if (suggestion) {
+        res.write(`data: ${JSON.stringify({ type: "suggestion", suggestion, cleanText: text })}\n\n`);
+      } else if (error) {
+        res.write(`data: ${JSON.stringify({ type: "suggestion", suggestion: null, cleanText: `${text}\n\n⚠ Could not apply automatically: ${error}` })}\n\n`);
+      }
     }
 
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);

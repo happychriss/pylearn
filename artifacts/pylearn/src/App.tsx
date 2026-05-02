@@ -9,6 +9,7 @@ import Landing from "@/pages/Landing";
 import StudentWorkspace from "@/pages/StudentWorkspace";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminWorkspaceView from "@/pages/AdminWorkspaceView";
+import CheatSheetView from "@/pages/CheatSheetView";
 import NotFound from "@/pages/not-found";
 
 // Wire up session type getter for all subsystems (auth, API client, WebSocket)
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/workspace" component={StudentWorkspace} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/student/:id" component={AdminWorkspaceView} />
+      <Route path="/cheatsheet/:id" component={CheatSheetView} />
       <Route component={NotFound} />
     </Switch>
   );

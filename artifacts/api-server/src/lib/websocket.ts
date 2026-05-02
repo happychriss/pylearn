@@ -16,10 +16,20 @@ interface WsClient {
 
 const clients = new Map<WebSocket, WsClient>();
 
-export function closeUserConnections(userId: string) {
+/**
+ * Notify a student that their session has ended, then close their connections.
+ * reason: "paused" | "deleted" | "kicked"
+ * The message is delivered best-effort — if the socket is already closed it's a no-op.
+ */
+export function closeUserConnections(userId: string, reason = "kicked") {
+  const payload = JSON.stringify({ type: "session-terminated", reason });
   clients.forEach((client, ws) => {
     if (client.userId === userId) {
-      ws.close();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(payload);
+      }
+      // Give the browser 150 ms to receive the message before the socket closes
+      setTimeout(() => ws.close(), 150);
     }
   });
 }

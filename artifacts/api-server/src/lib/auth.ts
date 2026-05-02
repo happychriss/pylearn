@@ -76,7 +76,11 @@ export async function clearSession(
   sid?: string,
 ): Promise<void> {
   if (sid) await deleteSession(sid);
+  // Clear both cookie names — we don't know which one was used, and clearing
+  // a cookie that doesn't exist is harmless. This prevents stale sid_student
+  // cookies from leaving students permanently stuck as unauthenticated.
   res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.clearCookie(STUDENT_SESSION_COOKIE, { path: "/" });
 }
 
 /**

@@ -4,3 +4,4 @@ export * from "./helpRequests";
 export * from "./aiConfig";
 export * from "./programs";
 export * from "./promptTemplates";
+export * from "./cheatSheets";

@@ -10,6 +10,7 @@ import adminRouter from "./admin";
 import adventureRouter from "./adventure";
 import programsRouter from "./programs";
 import promptsRouter from "./prompts";
+import cheatsheetsRouter from "./cheatsheets";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(adminRouter);
 router.use(adventureRouter);
 router.use(programsRouter);
 router.use(promptsRouter);
+router.use(cheatsheetsRouter);
 
 export default router;

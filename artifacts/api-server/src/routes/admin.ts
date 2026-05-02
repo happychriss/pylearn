@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { db, usersTable, aiConfigTable, helpRequestsTable, filesTable, studentAccountsTable, sessionsTable } from "@workspace/db";
+import { db, usersTable, aiConfigTable, helpRequestsTable, filesTable, studentAccountsTable, sessionsTable, cheatSheetsTable } from "@workspace/db";
 import {
   ListStudentsResponse,
   GetAiConfigResponse,
@@ -175,7 +175,7 @@ router.patch("/admin/students/:id", async (req, res): Promise<void> => {
     .where(eq(studentAccountsTable.id, studentId));
 
   if (isPaused) {
-    closeUserConnections(studentId);
+    closeUserConnections(studentId, "paused");
     await invalidateStudentSessions(studentId);
   }
 
@@ -210,7 +210,7 @@ router.delete("/admin/students/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  closeUserConnections(studentId);
+  closeUserConnections(studentId, "deleted");
   await invalidateStudentSessions(studentId);
 
   await db.transaction(async (tx) => {
@@ -325,6 +325,56 @@ router.put("/admin/ai-config", async (req, res): Promise<void> => {
 
   const safeUpdated = { ...updated, apiKey: updated.apiKey ? "********" : null };
   res.json(UpdateAiConfigResponse.parse(safeUpdated));
+});
+
+// ── Cheat Sheets ──────────────────────────────────────────────────────────────
+
+router.get("/admin/cheatsheets", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+  const sheets = await db.select().from(cheatSheetsTable).orderBy(cheatSheetsTable.sortOrder, cheatSheetsTable.id);
+  res.json(sheets);
+});
+
+router.post("/admin/cheatsheets", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+  const { title, icon, content, isActive, sortOrder } = req.body;
+  if (!title?.trim()) { res.status(400).json({ error: "title required" }); return; }
+  const [sheet] = await db.insert(cheatSheetsTable).values({
+    title: title.trim(), icon: icon ?? "📄", content: content ?? "", isActive: isActive ?? false, sortOrder: sortOrder ?? 0,
+  }).returning();
+  res.status(201).json(sheet);
+});
+
+router.put("/admin/cheatsheets/:id", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+  const id = parseInt(req.params.id);
+  const { title, icon, content, isActive, sortOrder } = req.body;
+  const update: Record<string, unknown> = {};
+  if (title !== undefined) update.title = title.trim();
+  if (icon !== undefined) update.icon = icon;
+  if (content !== undefined) update.content = content;
+  if (isActive !== undefined) update.isActive = isActive;
+  if (sortOrder !== undefined) update.sortOrder = sortOrder;
+  const [sheet] = await db.update(cheatSheetsTable).set(update).where(eq(cheatSheetsTable.id, id)).returning();
+  if (!sheet) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(sheet);
+});
+
+router.delete("/admin/cheatsheets/:id", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+  const id = parseInt(req.params.id);
+  await db.delete(cheatSheetsTable).where(eq(cheatSheetsTable.id, id));
+  res.json({ success: true });
+});
+
+router.post("/admin/cheatsheets/:id/toggle", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+  const id = parseInt(req.params.id);
+  const [current] = await db.select().from(cheatSheetsTable).where(eq(cheatSheetsTable.id, id));
+  if (!current) { res.status(404).json({ error: "Not found" }); return; }
+  const [sheet] = await db.update(cheatSheetsTable).set({ isActive: !current.isActive }).where(eq(cheatSheetsTable.id, id)).returning();
+  broadcastToStudents({ type: "cheatsheet-updated" });
+  res.json(sheet);
 });
 
 export default router;

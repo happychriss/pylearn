@@ -502,3 +502,130 @@ export const UpdateAiConfigResponse = zod.object({
   offSystemPrompt: zod.string(),
   chatSystemPrompt: zod.string(),
 });
+
+/**
+ * @summary List active cheat sheets (for students)
+ */
+export const ListActiveCheatSheetsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  icon: zod.string(),
+  content: zod.string(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+export const ListActiveCheatSheetsResponse = zod.array(
+  ListActiveCheatSheetsResponseItem,
+);
+
+/**
+ * @summary Get a single cheat sheet by id
+ */
+export const GetCheatSheetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetCheatSheetResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  icon: zod.string(),
+  content: zod.string(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary List all cheat sheets
+ */
+export const ListCheatSheetsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  icon: zod.string(),
+  content: zod.string(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+export const ListCheatSheetsResponse = zod.array(ListCheatSheetsResponseItem);
+
+/**
+ * @summary Create a cheat sheet
+ */
+
+export const createCheatSheetBodyIconDefault = `📄`;
+export const createCheatSheetBodyContentDefault = ``;
+export const createCheatSheetBodyIsActiveDefault = false;
+export const createCheatSheetBodySortOrderDefault = 0;
+
+export const CreateCheatSheetBody = zod.object({
+  title: zod.string().min(1),
+  icon: zod.string().default(createCheatSheetBodyIconDefault),
+  content: zod.string().default(createCheatSheetBodyContentDefault),
+  isActive: zod.boolean().default(createCheatSheetBodyIsActiveDefault),
+  sortOrder: zod.number().default(createCheatSheetBodySortOrderDefault),
+});
+
+/**
+ * @summary Update a cheat sheet
+ */
+export const UpdateCheatSheetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateCheatSheetBodyIconDefault = `📄`;
+export const updateCheatSheetBodyContentDefault = ``;
+export const updateCheatSheetBodyIsActiveDefault = false;
+export const updateCheatSheetBodySortOrderDefault = 0;
+
+export const UpdateCheatSheetBody = zod.object({
+  title: zod.string().min(1),
+  icon: zod.string().default(updateCheatSheetBodyIconDefault),
+  content: zod.string().default(updateCheatSheetBodyContentDefault),
+  isActive: zod.boolean().default(updateCheatSheetBodyIsActiveDefault),
+  sortOrder: zod.number().default(updateCheatSheetBodySortOrderDefault),
+});
+
+export const UpdateCheatSheetResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  icon: zod.string(),
+  content: zod.string(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary Delete a cheat sheet
+ */
+export const DeleteCheatSheetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteCheatSheetResponse = zod.object({
+  success: zod.boolean().optional(),
+});
+
+/**
+ * @summary Toggle active state of a cheat sheet
+ */
+export const ToggleCheatSheetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ToggleCheatSheetResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  icon: zod.string(),
+  content: zod.string(),
+  isActive: zod.boolean(),
+  sortOrder: zod.number(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});

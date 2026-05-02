@@ -20,9 +20,21 @@ app.use("/api", router);
 // In production, serve the built SPA frontend
 if (process.env.NODE_ENV === "production") {
   const staticDir = path.resolve(__dirname, "..", "..", "pylearn", "dist", "public");
-  app.use(express.static(staticDir));
+  // Versioned assets (content-hashed filenames) can be cached indefinitely.
+  // Everything else (including index.html) must not be cached so browsers
+  // always fetch the latest entry point after a deploy.
+  app.use(express.static(staticDir, {
+    setHeaders(res, filePath) {
+      if (filePath.includes("/assets/")) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        res.setHeader("Cache-Control", "no-store");
+      }
+    },
+  }));
   // SPA fallback: serve index.html for any non-API route
   app.get("/{*path}", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.sendFile(path.join(staticDir, "index.html"));
   });
 }

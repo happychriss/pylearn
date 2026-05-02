@@ -18,6 +18,8 @@ export function setAuthSessionTypeGetter(getter: () => string) {
   _sessionTypeGetter = getter;
 }
 
+const AUTH_POLL_INTERVAL_MS = 30_000;
+
 export function useAuth(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,31 +27,36 @@ export function useAuth(): AuthState {
   useEffect(() => {
     let cancelled = false;
 
-    const headers: Record<string, string> = {};
-    if (_sessionTypeGetter) {
-      headers["x-session-type"] = _sessionTypeGetter();
-    }
+    const checkAuth = () => {
+      const headers: Record<string, string> = {};
+      if (_sessionTypeGetter) {
+        headers["x-session-type"] = _sessionTypeGetter();
+      }
+      return fetch("/api/auth/user", { credentials: "include", headers })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json() as Promise<{ user: AuthUser | null }>;
+        })
+        .then((data) => {
+          if (!cancelled) {
+            setUser(data.user ?? null);
+            setIsLoading(false);
+          }
+        })
+        .catch(() => {
+          // Network error — don't clear the user so students can keep working
+          // through a brief WiFi blip. Only an explicit null from the server
+          // clears the session.
+          if (!cancelled) setIsLoading(false);
+        });
+    };
 
-    fetch("/api/auth/user", { credentials: "include", headers })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<{ user: AuthUser | null }>;
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setUser(data.user ?? null);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setUser(null);
-          setIsLoading(false);
-        }
-      });
+    checkAuth();
+    const interval = setInterval(checkAuth, AUTH_POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, []);
 

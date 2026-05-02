@@ -323,6 +323,26 @@ export interface UpdateStudentCreditsResponse {
   aiCredits: number;
 }
 
+export interface CheatSheet {
+  id: number;
+  title: string;
+  icon: string;
+  content: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CheatSheetBody {
+  /** @minLength 1 */
+  title: string;
+  icon?: string;
+  content?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
 export type AuthorizationSessionHeaderParameter = string;
 
 export type BeginBrowserLoginParams = {
@@ -352,4 +372,8 @@ export type DeleteStudentAccount200 = {
 
 export type DeletePromptTemplate200 = {
   ok?: boolean;
+};
+
+export type DeleteCheatSheet200 = {
+  success?: boolean;
 };

@@ -23,11 +23,14 @@ import type {
   AssignToStudentBody,
   AuthUserEnvelope,
   BeginBrowserLoginParams,
+  CheatSheet,
+  CheatSheetBody,
   CreateFileBody,
   CreateHelpRequestBody,
   CreatePromptTemplateBody,
   CreateStudentBody,
   CreatedStudentResponse,
+  DeleteCheatSheet200,
   DeletePromptTemplate200,
   DeleteStudentAccount200,
   ErrorEnvelope,
@@ -3077,4 +3080,582 @@ export const useUpdateAiConfig = <
   TContext
 > => {
   return useMutation(getUpdateAiConfigMutationOptions(options));
+};
+
+/**
+ * @summary List active cheat sheets (for students)
+ */
+export const getListActiveCheatSheetsUrl = () => {
+  return `/api/cheatsheets/active`;
+};
+
+export const listActiveCheatSheets = async (
+  options?: RequestInit,
+): Promise<CheatSheet[]> => {
+  return customFetch<CheatSheet[]>(getListActiveCheatSheetsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListActiveCheatSheetsQueryKey = () => {
+  return [`/api/cheatsheets/active`] as const;
+};
+
+export const getListActiveCheatSheetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActiveCheatSheets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveCheatSheets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListActiveCheatSheetsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listActiveCheatSheets>>
+  > = ({ signal }) => listActiveCheatSheets({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveCheatSheets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActiveCheatSheetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActiveCheatSheets>>
+>;
+export type ListActiveCheatSheetsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List active cheat sheets (for students)
+ */
+
+export function useListActiveCheatSheets<
+  TData = Awaited<ReturnType<typeof listActiveCheatSheets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveCheatSheets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActiveCheatSheetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a single cheat sheet by id
+ */
+export const getGetCheatSheetUrl = (id: number) => {
+  return `/api/cheatsheets/${id}`;
+};
+
+export const getCheatSheet = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CheatSheet> => {
+  return customFetch<CheatSheet>(getGetCheatSheetUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCheatSheetQueryKey = (id: number) => {
+  return [`/api/cheatsheets/${id}`] as const;
+};
+
+export const getGetCheatSheetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCheatSheet>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCheatSheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCheatSheetQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCheatSheet>>> = ({
+    signal,
+  }) => getCheatSheet(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCheatSheet>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCheatSheetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCheatSheet>>
+>;
+export type GetCheatSheetQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a single cheat sheet by id
+ */
+
+export function useGetCheatSheet<
+  TData = Awaited<ReturnType<typeof getCheatSheet>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCheatSheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCheatSheetQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all cheat sheets
+ */
+export const getListCheatSheetsUrl = () => {
+  return `/api/admin/cheatsheets`;
+};
+
+export const listCheatSheets = async (
+  options?: RequestInit,
+): Promise<CheatSheet[]> => {
+  return customFetch<CheatSheet[]>(getListCheatSheetsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCheatSheetsQueryKey = () => {
+  return [`/api/admin/cheatsheets`] as const;
+};
+
+export const getListCheatSheetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCheatSheets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCheatSheets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCheatSheetsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listCheatSheets>>> = ({
+    signal,
+  }) => listCheatSheets({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCheatSheets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCheatSheetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCheatSheets>>
+>;
+export type ListCheatSheetsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all cheat sheets
+ */
+
+export function useListCheatSheets<
+  TData = Awaited<ReturnType<typeof listCheatSheets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCheatSheets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCheatSheetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a cheat sheet
+ */
+export const getCreateCheatSheetUrl = () => {
+  return `/api/admin/cheatsheets`;
+};
+
+export const createCheatSheet = async (
+  cheatSheetBody: CheatSheetBody,
+  options?: RequestInit,
+): Promise<CheatSheet> => {
+  return customFetch<CheatSheet>(getCreateCheatSheetUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cheatSheetBody),
+  });
+};
+
+export const getCreateCheatSheetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCheatSheet>>,
+    TError,
+    { data: BodyType<CheatSheetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCheatSheet>>,
+  TError,
+  { data: BodyType<CheatSheetBody> },
+  TContext
+> => {
+  const mutationKey = ["createCheatSheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCheatSheet>>,
+    { data: BodyType<CheatSheetBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCheatSheet(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCheatSheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCheatSheet>>
+>;
+export type CreateCheatSheetMutationBody = BodyType<CheatSheetBody>;
+export type CreateCheatSheetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a cheat sheet
+ */
+export const useCreateCheatSheet = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCheatSheet>>,
+    TError,
+    { data: BodyType<CheatSheetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCheatSheet>>,
+  TError,
+  { data: BodyType<CheatSheetBody> },
+  TContext
+> => {
+  return useMutation(getCreateCheatSheetMutationOptions(options));
+};
+
+/**
+ * @summary Update a cheat sheet
+ */
+export const getUpdateCheatSheetUrl = (id: number) => {
+  return `/api/admin/cheatsheets/${id}`;
+};
+
+export const updateCheatSheet = async (
+  id: number,
+  cheatSheetBody: CheatSheetBody,
+  options?: RequestInit,
+): Promise<CheatSheet> => {
+  return customFetch<CheatSheet>(getUpdateCheatSheetUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cheatSheetBody),
+  });
+};
+
+export const getUpdateCheatSheetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCheatSheet>>,
+    TError,
+    { id: number; data: BodyType<CheatSheetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCheatSheet>>,
+  TError,
+  { id: number; data: BodyType<CheatSheetBody> },
+  TContext
+> => {
+  const mutationKey = ["updateCheatSheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCheatSheet>>,
+    { id: number; data: BodyType<CheatSheetBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateCheatSheet(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCheatSheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCheatSheet>>
+>;
+export type UpdateCheatSheetMutationBody = BodyType<CheatSheetBody>;
+export type UpdateCheatSheetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a cheat sheet
+ */
+export const useUpdateCheatSheet = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCheatSheet>>,
+    TError,
+    { id: number; data: BodyType<CheatSheetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateCheatSheet>>,
+  TError,
+  { id: number; data: BodyType<CheatSheetBody> },
+  TContext
+> => {
+  return useMutation(getUpdateCheatSheetMutationOptions(options));
+};
+
+/**
+ * @summary Delete a cheat sheet
+ */
+export const getDeleteCheatSheetUrl = (id: number) => {
+  return `/api/admin/cheatsheets/${id}`;
+};
+
+export const deleteCheatSheet = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteCheatSheet200> => {
+  return customFetch<DeleteCheatSheet200>(getDeleteCheatSheetUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCheatSheetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCheatSheet>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCheatSheet>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteCheatSheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCheatSheet>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteCheatSheet(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCheatSheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCheatSheet>>
+>;
+
+export type DeleteCheatSheetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a cheat sheet
+ */
+export const useDeleteCheatSheet = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCheatSheet>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCheatSheet>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteCheatSheetMutationOptions(options));
+};
+
+/**
+ * @summary Toggle active state of a cheat sheet
+ */
+export const getToggleCheatSheetUrl = (id: number) => {
+  return `/api/admin/cheatsheets/${id}/toggle`;
+};
+
+export const toggleCheatSheet = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CheatSheet> => {
+  return customFetch<CheatSheet>(getToggleCheatSheetUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getToggleCheatSheetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleCheatSheet>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleCheatSheet>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["toggleCheatSheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleCheatSheet>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return toggleCheatSheet(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleCheatSheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleCheatSheet>>
+>;
+
+export type ToggleCheatSheetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Toggle active state of a cheat sheet
+ */
+export const useToggleCheatSheet = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleCheatSheet>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleCheatSheet>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getToggleCheatSheetMutationOptions(options));
 };

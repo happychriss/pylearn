@@ -10,10 +10,10 @@ import { AiPanel } from '@/components/workspace/AiPanel';
 import { AiChatPanel } from '@/components/workspace/AiChatPanel';
 import { Terminal } from '@/components/workspace/Terminal';
 import { OutputPanel } from '@/components/workspace/OutputPanel';
-import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile, useGetStudentAiConfig } from '@workspace/api-client-react';
+import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile, useGetStudentAiConfig, useListActiveCheatSheets } from '@workspace/api-client-react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff } from 'lucide-react';
+import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff, Info } from 'lucide-react';
 import { usePtySession } from '@/hooks/use-pty-session';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useDisplayEvents } from '@/hooks/use-display-events';
@@ -34,6 +34,7 @@ export default function StudentWorkspace() {
   const { data: profile, refetch: refetchProfile } = useGetMyProfile({ query: { enabled: isAuthenticated } });
   const { data: files } = useListFiles({}, { query: { enabled: isAuthenticated, refetchInterval: 5000 } });
   const { data: aiConfig } = useGetStudentAiConfig({ query: { enabled: isAuthenticated, refetchInterval: 10000 } });
+  const { data: activeSheets = [], refetch: refetchSheets } = useListActiveCheatSheets({ query: { enabled: isAuthenticated, refetchInterval: 60000, staleTime: 0, refetchIntervalInBackground: true } });
   const updateFile = useUpdateFile();
   const helpReq = useCreateHelpRequest();
 
@@ -68,6 +69,7 @@ export default function StudentWorkspace() {
   const [teacherViewing, setTeacherViewing] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [modeChangedWhileActive, setModeChangedWhileActive] = useState(false);
+  const [sessionTerminatedReason, setSessionTerminatedReason] = useState<string | null>(null);
   // showConsole only matters when isVisualMode — starts hidden so output is clean on first display event
   const [showConsole, setShowConsole] = useState(false);
   const [consoleHasOutput, setConsoleHasOutput] = useState(false);
@@ -98,11 +100,11 @@ export default function StudentWorkspace() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const rejoin = () => emit('join-room', { room: user.id });
+    const rejoin = () => { emit('join-room', { room: user.id }); refetchSheets(); };
     rejoin();
     const cleanup = onConnect(rejoin);
     return cleanup;
-  }, [user?.id, emit, onConnect]);
+  }, [user?.id, emit, onConnect, refetchSheets]);
 
   useEffect(() => {
     const cleanup = listen(
@@ -137,13 +139,48 @@ export default function StudentWorkspace() {
       }
     });
     const off5 = on('ai-mode-changed', () => setModeChangedWhileActive(true));
-    return () => { off1(); off2(); off3(); off4(); off5(); };
-  }, [on, user?.id, updateUnsavedContent]);
+    const off6 = on('cheatsheet-updated', () => refetchSheets());
+    const off7 = on('session-terminated', (msg: Record<string, unknown>) => {
+      setSessionTerminatedReason((msg.reason as string) || 'kicked');
+    });
+    return () => { off1(); off2(); off3(); off4(); off5(); off6(); off7(); };
+  }, [on, user?.id, updateUnsavedContent, refetchSheets]);
 
   if (isLoading) {
     return <div className="h-dvh w-full flex items-center justify-center bg-background text-muted-foreground">Loading...</div>;
   }
   if (!isAuthenticated) return null;
+
+  if (sessionTerminatedReason) {
+    const isPaused = sessionTerminatedReason === 'paused';
+    return (
+      <div className="h-dvh w-full flex items-center justify-center bg-background px-4">
+        <div className="p-8 rounded-2xl bg-card border shadow-lg text-center max-w-sm w-full">
+          <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <Hand className="w-7 h-7 text-destructive" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">
+            {isPaused ? 'Your session has been paused' : 'Your session has ended'}
+          </h2>
+          <p className="text-muted-foreground mb-6">
+            {isPaused
+              ? 'Your teacher has paused your access. Please raise your hand and wait for them.'
+              : 'Your teacher has ended your session. Please speak to your teacher.'}
+          </p>
+          <Button
+            onClick={async () => {
+              await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
+              window.location.href = '/';
+            }}
+            variant="outline"
+            className="w-full rounded-xl"
+          >
+            <LogOut className="w-4 h-4 mr-2" /> Back to login
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (modeChangedWhileActive) {
     return (
@@ -181,7 +218,7 @@ export default function StudentWorkspace() {
     const onMove = (e: MouseEvent) => {
       if (!aiResizeRef.current) return;
       const delta = aiResizeRef.current.startX - e.clientX;
-      setAiPanelWidth(Math.max(220, Math.min(600, aiResizeRef.current.startWidth + delta)));
+      setAiPanelWidth(Math.max(220, Math.min(window.innerWidth * 0.55, aiResizeRef.current.startWidth + delta)));
     };
     const onUp = () => {
       aiResizeRef.current = null;
@@ -376,6 +413,18 @@ export default function StudentWorkspace() {
         </div>
 
         <div className="flex items-center gap-2">
+          {activeSheets.map(sheet => (
+            <Button
+              key={sheet.id}
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/cheatsheet/${sheet.id}`, `cheatsheet-${sheet.id}`, 'width=800,height=700,resizable=yes,scrollbars=yes')}
+              className="rounded-xl border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <Info className="w-4 h-4 mr-1.5" />{sheet.title}
+            </Button>
+          ))}
+
           <Button
             variant="outline"
             size="sm"

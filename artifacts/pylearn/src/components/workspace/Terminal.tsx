@@ -22,6 +22,8 @@ export function Terminal({ onInput, terminalRef, readOnly = false }: TerminalPro
         background: '#f0fdf4',
         foreground: '#14532d',
         cursor: readOnly ? '#00000000' : '#15803d',
+        selectionBackground: '#86efac',
+        selectionForeground: '#14532d',
         black: '#1c1917',
         red: '#dc2626',
         green: '#16a34a',

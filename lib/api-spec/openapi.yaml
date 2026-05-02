@@ -674,6 +674,131 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AiConfig'
+  /cheatsheets/active:
+    get:
+      tags: [cheatsheets]
+      operationId: listActiveCheatSheets
+      summary: List active cheat sheets (for students)
+      responses:
+        '200':
+          description: Active cheat sheets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheatSheet'
+  /cheatsheets/{id}:
+    get:
+      tags: [cheatsheets]
+      operationId: getCheatSheet
+      summary: Get a single cheat sheet by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cheat sheet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheatSheet'
+  /admin/cheatsheets:
+    get:
+      tags: [admin]
+      operationId: listCheatSheets
+      summary: List all cheat sheets
+      responses:
+        '200':
+          description: All cheat sheets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheatSheet'
+    post:
+      tags: [admin]
+      operationId: createCheatSheet
+      summary: Create a cheat sheet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheatSheetBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheatSheet'
+  /admin/cheatsheets/{id}:
+    put:
+      tags: [admin]
+      operationId: updateCheatSheet
+      summary: Update a cheat sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheatSheetBody'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheatSheet'
+    delete:
+      tags: [admin]
+      operationId: deleteCheatSheet
+      summary: Delete a cheat sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+  /admin/cheatsheets/{id}/toggle:
+    post:
+      tags: [admin]
+      operationId: toggleCheatSheet
+      summary: Toggle active state of a cheat sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheatSheet'
 components:
   parameters:
     AuthorizationSessionHeader:
@@ -1078,3 +1203,44 @@ components:
           type: string
         aiCredits:
           type: integer
+    CheatSheet:
+      type: object
+      required: [id, title, icon, content, isActive, sortOrder, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        icon:
+          type: string
+        content:
+          type: string
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CheatSheetBody:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        icon:
+          type: string
+          default: "📄"
+        content:
+          type: string
+          default: ""
+        isActive:
+          type: boolean
+          default: false
+        sortOrder:
+          type: integer
+          default: 0

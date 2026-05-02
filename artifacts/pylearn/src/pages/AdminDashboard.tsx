@@ -4,7 +4,7 @@ import { useAuth } from '@workspace/auth-web';
 import { useLocation } from 'wouter';
 import { setSessionType } from '@/lib/session-type';
 
-import { useListStudents, useGetAiConfig, useUpdateAiConfig, useListHelpRequests, useDismissHelpRequest, useListStudentAccounts, useCreateStudentAccount, useToggleStudentPause, useDeleteStudentAccount, useUpdateStudentCredits } from '@workspace/api-client-react';
+import { useListStudents, useGetAiConfig, useUpdateAiConfig, useListHelpRequests, useDismissHelpRequest, useListStudentAccounts, useCreateStudentAccount, useToggleStudentPause, useDeleteStudentAccount, useUpdateStudentCredits, useListCheatSheets, useCreateCheatSheet, useUpdateCheatSheet, useDeleteCheatSheet, useToggleCheatSheet } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { BookOpen, Settings, Users, AlertCircle, LogOut, UserPlus, Pause, Play, Trash2, Copy, Check, Plus, FileCode, ChevronDown, Library, ChevronRight, MessageCircle, RotateCcw } from 'lucide-react';
+import { BookOpen, Settings, Users, AlertCircle, LogOut, UserPlus, Pause, Play, Trash2, Copy, Check, Plus, FileCode, ChevronDown, Library, ChevronRight, MessageCircle, RotateCcw, FileText, Eye, EyeOff, Pencil } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { toast } from '@/hooks/use-toast';
@@ -47,6 +47,121 @@ interface AiConfigForm {
   agentSystemPrompt: string;
   offSystemPrompt: string;
   chatSystemPrompt: string;
+}
+
+function CheatSheetsTab() {
+  const { data: sheets = [], isLoading, refetch } = useListCheatSheets();
+  const createSheet = useCreateCheatSheet();
+  const updateSheet = useUpdateCheatSheet();
+  const deleteSheet = useDeleteCheatSheet();
+  const toggleSheet = useToggleCheatSheet();
+
+  const [editing, setEditing] = useState<null | { id?: number; title: string; content: string; sortOrder: number }>(null);
+
+  const handleSave = () => {
+    if (!editing || !editing.title.trim()) return;
+    const data = { title: editing.title.trim(), content: editing.content, sortOrder: editing.sortOrder };
+    if (editing.id) {
+      updateSheet.mutate({ id: editing.id, data }, { onSuccess: () => { refetch(); setEditing(null); } });
+    } else {
+      createSheet.mutate({ data }, { onSuccess: () => { refetch(); setEditing(null); } });
+    }
+  };
+
+  const handleToggle = (id: number) => {
+    toggleSheet.mutate({ id }, { onSuccess: refetch });
+  };
+
+  const handleDelete = (id: number) => {
+    if (!confirm('Delete this cheat sheet?')) return;
+    deleteSheet.mutate({ id }, { onSuccess: refetch });
+  };
+
+  if (editing !== null) {
+    return (
+      <Card className="shadow-md max-w-3xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            {editing.id ? 'Edit Cheat Sheet' : 'New Cheat Sheet'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <Label className="text-xs mb-1 block">Title</Label>
+              <Input value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} placeholder="Python Basics" />
+            </div>
+            <div className="w-24">
+              <Label className="text-xs mb-1 block">Order</Label>
+              <Input type="number" value={editing.sortOrder} onChange={e => setEditing({ ...editing, sortOrder: parseInt(e.target.value) || 0 })} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs mb-1 block">Content (Markdown)</Label>
+            <Textarea
+              value={editing.content}
+              onChange={e => setEditing({ ...editing, content: e.target.value })}
+              className="font-mono text-sm min-h-[400px]"
+              placeholder="# Python Basics&#10;&#10;## Variables&#10;```python&#10;x = 5&#10;```"
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={createSheet.isPending || updateSheet.isPending}>Save</Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Cheat Sheets</CardTitle>
+          <CardDescription>Active sheets appear as buttons in the student header</CardDescription>
+        </div>
+        <Button size="sm" onClick={() => setEditing({ title: '', content: '', sortOrder: 0 })}>
+          <Plus className="w-4 h-4 mr-1" /> New Sheet
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : sheets.length === 0 ? (
+          <p className="text-muted-foreground text-sm text-center py-8">No cheat sheets yet. Click "New Sheet" to create one.</p>
+        ) : (
+          <div className="space-y-2">
+            {sheets.map(sheet => (
+              <div key={sheet.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{sheet.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">{sheet.content.slice(0, 60) || '(empty)'}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => handleToggle(sheet.id)}
+                    className={sheet.isActive ? 'text-green-600 hover:text-green-700' : 'text-muted-foreground'}
+                    title={sheet.isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                  >
+                    {sheet.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    <span className="ml-1 text-xs">{sheet.isActive ? 'Active' : 'Hidden'}</span>
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setEditing({ id: sheet.id, title: sheet.title, content: sheet.content, sortOrder: sheet.sortOrder })}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(sheet.id)} className="text-destructive hover:text-destructive">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function AdminDashboard() {
@@ -384,11 +499,12 @@ export default function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-8">
+          <TabsList className="grid w-full grid-cols-6 mb-8">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
             <TabsTrigger value="programs">Programs</TabsTrigger>
             <TabsTrigger value="prompts">Prompts</TabsTrigger>
+            <TabsTrigger value="cheatsheets">Cheat Sheets</TabsTrigger>
             <TabsTrigger value="settings">AI Settings</TabsTrigger>
           </TabsList>
 
@@ -890,6 +1006,10 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="cheatsheets">
+            <CheatSheetsTab />
           </TabsContent>
 
           <TabsContent value="settings">

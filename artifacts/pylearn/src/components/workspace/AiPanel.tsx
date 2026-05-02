@@ -4,7 +4,7 @@ import { useChatStream, type StreamingMessage, type ParsedSuggestion } from '@/h
 import { DiffView } from '../ui/diff-view';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Copy, Check } from 'lucide-react';
 import { useAcceptSuggestion, useRejectSuggestion } from '@workspace/api-client-react';
 import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,6 +13,20 @@ import ReactMarkdown from 'react-markdown';
 interface AiPanelProps {
   credits: number;
   onCreditUsed?: () => void;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button onClick={handleCopy} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors py-0.5 px-1 rounded hover:bg-muted ml-auto">
+      {copied ? <><Check className="w-3 h-3 text-green-500" />Copied</> : <><Copy className="w-3 h-3" />Copy</>}
+    </button>
+  );
 }
 
 export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
@@ -113,8 +127,9 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
                             components={{
                               code: ({ children, className }) => {
                                 const isBlock = className?.startsWith('language-');
+                                const text = String(children).replace(/\n$/, '');
                                 return isBlock
-                                  ? <pre className="bg-background/60 rounded p-2 mt-1 mb-1 overflow-x-auto text-xs font-mono"><code>{children}</code></pre>
+                                  ? <div className="mt-1 mb-1"><pre className="bg-background/60 rounded-t p-2 overflow-x-auto text-xs font-mono"><code>{children}</code></pre><div className="bg-background/40 rounded-b border-t border-border/30 flex"><CopyButton text={text} /></div></div>
                                   : <code className="bg-background/60 rounded px-1 font-mono text-xs">{children}</code>;
                               },
                               p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
