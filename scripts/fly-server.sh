@@ -59,8 +59,9 @@ _get_machine_state() {
 }
 
 _ensure_db_machine() {
-  # Always ensure DB autostart is on so it wakes automatically with the app
-  fly machine update "$DB_MACHINE_ID" --app "$DB_APP_NAME" --autostart=true --yes 2>&1 | grep -v "^Monitor" || true
+  # Keep autostart+autostop enabled so DB wakes/sleeps automatically with the app
+  fly machine update "$DB_MACHINE_ID" --app "$DB_APP_NAME" \
+    --autostart=true --autostop=true --yes 2>&1 | grep -v "^Monitor" || true
 
   local db_state
   db_state=$(fly machines list --app "$DB_APP_NAME" --json 2>/dev/null \
@@ -98,25 +99,25 @@ do_status() {
     return 1
   fi
 
+  local db_state
+  db_state=$(fly machines list --app "$DB_APP_NAME" --json 2>/dev/null \
+    | python3 -c "import sys,json; m=json.load(sys.stdin); print(m[0]['state'] if m else 'unknown')" 2>/dev/null)
+
   case "$state" in
     started)
-      echo "✓ Fly app $APP_NAME is RUNNING"
-      echo "  machine: $mid  state: $state"
-      echo "  url: https://$APP_NAME.fly.dev"
-      # check autostart
-      local autostart
-      autostart=$(_fly_json \
-        | python3 -c "import sys,json; m=json.load(sys.stdin)[0]; c=m.get('config',{}).get('services',[{}])[0]; print(c.get('autostart', 'unknown'))" 2>/dev/null || echo "unknown")
-      echo "  autostart: $autostart"
+      echo "✓ App:      $APP_NAME  RUNNING   → https://$APP_NAME.fly.dev"
       ;;
     stopped)
-      echo "✗ Fly app $APP_NAME is STOPPED"
-      echo "  machine: $mid  state: $state"
+      echo "✗ App:      $APP_NAME  STOPPED"
       ;;
     *)
-      echo "? Fly app $APP_NAME state: $state"
-      echo "  machine: $mid"
+      echo "? App:      $APP_NAME  $state"
       ;;
+  esac
+  case "$db_state" in
+    started) echo "✓ Database: $DB_APP_NAME  RUNNING  (autostart+autostop)" ;;
+    stopped) echo "✗ Database: $DB_APP_NAME  STOPPED  (autostart+autostop)" ;;
+    *)       echo "? Database: $DB_APP_NAME  $db_state" ;;
   esac
 }
 
@@ -175,31 +176,28 @@ do_stop() {
     return 1
   fi
 
+  # Stop app
   if [[ "$state" == "stopped" ]]; then
-    echo "Already stopped (machine $mid)."
-    # still disable autostart to be safe
-    fly machine update "$mid" --app "$APP_NAME" --autostart=false --yes 2>&1 | tail -2
-    echo "Autostart disabled."
-    return 0
-  fi
-
-  echo "Disabling autostart (prevents wake-on-request)…"
-  fly machine update "$mid" --app "$APP_NAME" --autostart=false --yes 2>&1 | tail -2
-
-  echo "Stopping machine $mid…"
-  fly machine stop "$mid" --app "$APP_NAME" 2>&1
-
-  # verify
-  sleep 3
-  _invalidate_cache
-  local new_state
-  new_state=$(_get_machine_state)
-  if [[ "$new_state" == "stopped" ]]; then
-    echo "✓ Fly app $APP_NAME is STOPPED (autostart disabled)"
+    echo "App already stopped."
   else
-    echo "⚠ Machine state is '$new_state' — may need a moment. Re-stopping…"
-    fly machine stop "$mid" --app "$APP_NAME" 2>&1 || true
+    echo "Disabling autostart + stopping app…"
+    fly machine update "$mid" --app "$APP_NAME" --autostart=false --yes 2>&1 | grep -v "^Monitor" || true
+    fly machine stop "$mid" --app "$APP_NAME" 2>&1
   fi
+
+  # Stop DB
+  local db_state
+  db_state=$(fly machines list --app "$DB_APP_NAME" --json 2>/dev/null \
+    | python3 -c "import sys,json; m=json.load(sys.stdin); print(m[0]['state'] if m else 'unknown')" 2>/dev/null)
+  if [[ "$db_state" == "stopped" ]]; then
+    echo "Database already stopped."
+  else
+    echo "Stopping database…"
+    fly machine stop "$DB_MACHINE_ID" --app "$DB_APP_NAME" 2>&1
+  fi
+
+  sleep 2
+  echo "✓ App + Database stopped."
 }
 
 do_deploy() {
