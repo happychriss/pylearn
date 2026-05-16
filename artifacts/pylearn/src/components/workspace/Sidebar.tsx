@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '../ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { getSessionType } from '@/lib/session-type';
+import { useTranslation } from '@/lib/i18n';
 
 interface UploadedImage {
   filename: string;
@@ -20,6 +21,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) {
+  const { t } = useTranslation();
   const { openFiles, activeFileId, setActiveFile, unsavedChanges } = useWorkspaceStore();
   const createFile = useCreateFile();
   const deleteFile = useDeleteFile();
@@ -75,14 +77,14 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
         headers: { 'X-Session-Type': getSessionType() },
       });
       if (res.ok) {
-        toast({ title: 'Uploaded!', description: `${file.name} is ready to use.` });
+        toast({ title: t('sidebar.upload_success'), description: t('sidebar.upload_success_desc', { filename: file.name }) });
         fetchImages();
       } else {
         const err = await res.json();
-        toast({ title: 'Upload failed', description: err.error || 'Unknown error', variant: 'destructive' });
+        toast({ title: t('sidebar.upload_fail'), description: err.error || 'Unknown error', variant: 'destructive' });
       }
     } catch {
-      toast({ title: 'Upload failed', description: 'Network error', variant: 'destructive' });
+      toast({ title: t('sidebar.upload_fail'), description: t('sidebar.network_error'), variant: 'destructive' });
     } finally {
       setUploading(false);
       if (imageInputRef.current) imageInputRef.current.value = '';
@@ -90,7 +92,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
   };
 
   const handleDeleteImage = async (filename: string) => {
-    if (!confirm(`Delete ${filename}?`)) return;
+    if (!confirm(t('sidebar.delete_image_confirm', { filename }))) return;
     try {
       const res = await fetch(`/api/adventure/images/${encodeURIComponent(filename)}`, {
         method: 'DELETE',
@@ -99,7 +101,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
       });
       if (res.ok) {
         setImages(prev => prev.filter(img => img.filename !== filename));
-        toast({ title: 'Deleted', description: `${filename} removed.` });
+        toast({ title: t('sidebar.deleted'), description: t('sidebar.deleted_desc', { filename }) });
       }
     } catch {}
   };
@@ -131,7 +133,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
     <div className="h-full bg-sidebar flex flex-col border-r border-border">
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">
-          {aiMode === 'chat' ? 'Prompts' : 'Files'}
+          {aiMode === 'chat' ? t('sidebar.prompts') : t('sidebar.files')}
         </h2>
         {aiMode !== 'chat' && <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setNewFilename(''); setCreateError(''); } }}>
           <DialogTrigger asChild>
@@ -141,19 +143,19 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New File</DialogTitle>
+              <DialogTitle>{t('sidebar.create_file_title')}</DialogTitle>
             </DialogHeader>
             <div className="flex gap-2 mt-4">
               <Input
                 value={newFilename}
                 onChange={e => { setNewFilename(e.target.value); setCreateError(''); }}
-                placeholder="filename.py"
+                placeholder={t('sidebar.filename_placeholder')}
                 onKeyDown={e => e.key === 'Enter' && handleCreate()}
               />
               <Button onClick={handleCreate} disabled={createFile.isPending}>
                 {createFile.isPending
-                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Creating…</>
-                  : "Create"}
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />{t('sidebar.creating')}</>
+                  : t('sidebar.create_btn')}
               </Button>
             </div>
             {createError && <p className="text-sm text-destructive mt-1">{createError}</p>}
@@ -174,13 +176,13 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
                 {isChatMode ? (
                   <>
                     <MessageCircle className="w-8 h-8 mb-2 opacity-20" />
-                    <p>No prompts yet.</p>
-                    <p className="text-xs mt-1">Your teacher will assign prompts.</p>
+                    <p>{t('sidebar.no_prompts')}</p>
+                    <p className="text-xs mt-1">{t('sidebar.no_prompts_hint')}</p>
                   </>
                 ) : (
                   <>
                     <FileIcon className="w-8 h-8 mb-2 opacity-20" />
-                    <p>No files yet.</p>
+                    <p>{t('sidebar.no_files')}</p>
                   </>
                 )}
               </div>
@@ -191,7 +193,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
             {creatingFile && !isChatMode && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-muted-foreground">
                 <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                <span className="truncate text-sm italic">Creating…</span>
+                <span className="truncate text-sm italic">{t('sidebar.creating')}</span>
               </div>
             )}
             {filteredFiles.map(file => {
@@ -251,13 +253,13 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete file</DialogTitle>
+            <DialogTitle>{t('sidebar.delete_title')}</DialogTitle>
             <DialogDescription>
-              Delete <span className="font-mono font-medium">{deleteTarget?.filename}</span>? This cannot be undone.
+              {t('sidebar.delete_image_confirm', { filename: deleteTarget?.filename ?? '' })} {t('sidebar.delete_cannot_undo')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</Button>
             <Button
               variant="destructive"
               disabled={deletingFileId === deleteTarget?.id}
@@ -274,7 +276,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
                 });
               }}
             >
-              Delete
+              {t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -283,7 +285,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
       {/* Images section — hidden in chat mode */}
       {aiMode !== 'chat' && <div className="border-t border-border shrink-0">
         <div className="p-4 flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">Images</h2>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-sidebar-foreground/70">{t('sidebar.images')}</h2>
           <input ref={imageInputRef} type="file" accept=".jpg,.jpeg,.png,.gif,.webp" className="hidden" onChange={handleUploadImage} />
           <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-sidebar-accent" onClick={() => imageInputRef.current?.click()} disabled={uploading} title="Upload image">
             <Upload className="w-4 h-4" />
@@ -310,7 +312,7 @@ export function Sidebar({ onFileSelect, aiMode, onPromptSelect }: SidebarProps) 
           </div>
         )}
         {images.length === 0 && (
-          <p className="px-4 pb-2 text-xs text-muted-foreground">No images yet.</p>
+          <p className="px-4 pb-2 text-xs text-muted-foreground">{t('sidebar.no_images')}</p>
         )}
         <div className="h-3 shrink-0" />
       </div>}

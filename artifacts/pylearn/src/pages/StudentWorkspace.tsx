@@ -19,6 +19,7 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { useDisplayEvents } from '@/hooks/use-display-events';
 import { toast } from '@/hooks/use-toast';
 import { APP_VERSION } from '@/lib/version';
+import { useTranslation } from '@/lib/i18n';
 import type { Terminal as XTerm } from '@xterm/xterm';
 
 type FullscreenPanel = 'code' | null;
@@ -29,6 +30,7 @@ const PANEL_HEADER_BTN = 'h-6 px-2 text-[11px] gap-1 text-primary-foreground/70 
 
 export default function StudentWorkspace() {
   setSessionType('student');
+  const { t } = useTranslation();
   const { user, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { data: profile, refetch: refetchProfile } = useGetMyProfile({ query: { enabled: isAuthenticated } });
@@ -147,7 +149,7 @@ export default function StudentWorkspace() {
   }, [on, user?.id, updateUnsavedContent, refetchSheets]);
 
   if (isLoading) {
-    return <div className="h-dvh w-full flex items-center justify-center bg-background text-muted-foreground">Loading...</div>;
+    return <div className="h-dvh w-full flex items-center justify-center bg-background text-muted-foreground">{t('workspace.loading')}</div>;
   }
   if (!isAuthenticated) return null;
 
@@ -160,12 +162,12 @@ export default function StudentWorkspace() {
             <Hand className="w-7 h-7 text-destructive" />
           </div>
           <h2 className="text-xl font-bold mb-2">
-            {isPaused ? 'Your session has been paused' : 'Your session has ended'}
+            {isPaused ? t('workspace.session_paused_title') : t('workspace.session_ended_title')}
           </h2>
           <p className="text-muted-foreground mb-6">
             {isPaused
-              ? 'Your teacher has paused your access. Please raise your hand and wait for them.'
-              : 'Your teacher has ended your session. Please speak to your teacher.'}
+              ? t('workspace.session_paused_desc')
+              : t('workspace.session_ended_desc')}
           </p>
           <Button
             onClick={async () => {
@@ -175,7 +177,7 @@ export default function StudentWorkspace() {
             variant="outline"
             className="w-full rounded-xl"
           >
-            <LogOut className="w-4 h-4 mr-2" /> Back to login
+            <LogOut className="w-4 h-4 mr-2" /> {t('workspace.back_to_login')}
           </Button>
         </div>
       </div>
@@ -189,9 +191,9 @@ export default function StudentWorkspace() {
           <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <MessageSquare className="w-7 h-7 text-primary" />
           </div>
-          <h2 className="text-xl font-bold mb-2">Classroom mode changed</h2>
+          <h2 className="text-xl font-bold mb-2">{t('workspace.mode_changed_title')}</h2>
           <p className="text-muted-foreground mb-6">
-            Your teacher has updated the classroom settings. Please log out and sign back in to continue.
+            {t('workspace.mode_changed_desc')}
           </p>
           <Button
             onClick={async () => {
@@ -200,7 +202,7 @@ export default function StudentWorkspace() {
             }}
             className="w-full rounded-xl"
           >
-            <LogOut className="w-4 h-4 mr-2" /> Log out
+            <LogOut className="w-4 h-4 mr-2" /> {t('common.logout')}
           </Button>
         </div>
       </div>
@@ -294,8 +296,8 @@ export default function StudentWorkspace() {
       <div className={PANEL_HEADER}>
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <Monitor className="w-4 h-4" />
-          <span>Output</span>
-          {isRunning && <span className="text-green-300 animate-pulse text-xs ml-1">● Running</span>}
+          <span>{t('workspace.output_label')}</span>
+          {isRunning && <span className="text-green-300 animate-pulse text-xs ml-1">{t('workspace.running')}</span>}
         </div>
         {/* Buttons only appear when there is visual output to act on */}
         {isVisualMode && (
@@ -304,14 +306,14 @@ export default function StudentWorkspace() {
               onClick={() => setShowConsole(prev => !prev)}
               className={PANEL_HEADER_BTN}>
               {showConsole
-                ? <><ChevronDown className="w-3 h-3" /> Hide console</>
-                : <><ChevronUp className="w-3 h-3" /> Show console</>
+                ? <><ChevronDown className="w-3 h-3" /> {t('workspace.hide_console')}</>
+                : <><ChevronUp className="w-3 h-3" /> {t('workspace.show_console')}</>
               }
             </Button>
             <Button variant="ghost" size="sm"
               onClick={handlePresent}
               className={PANEL_HEADER_BTN}>
-              <Maximize2 className="w-3 h-3" /> Present
+              <Maximize2 className="w-3 h-3" /> {t('workspace.present')}
             </Button>
           </div>
         )}
@@ -337,7 +339,7 @@ export default function StudentWorkspace() {
                 onClick={() => document.exitFullscreen()}
                 className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white bg-black/40 hover:bg-black/60 border border-white/20 backdrop-blur-sm transition-colors"
               >
-                <Minimize2 className="w-4 h-4" /> Exit
+                <Minimize2 className="w-4 h-4" /> {t('workspace.exit_present')}
               </button>
             )}
           </div>
@@ -363,9 +365,9 @@ export default function StudentWorkspace() {
           {!isVisualMode && !consoleHasOutput && !isRunning && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6 pointer-events-none">
               <TerminalIcon className="w-10 h-10 text-green-400" />
-              <p className="text-sm font-medium text-green-700">Console is empty</p>
+              <p className="text-sm font-medium text-green-700">{t('workspace.console_empty_title')}</p>
               <p className="text-xs text-green-600/70 max-w-[220px] leading-relaxed">
-                When your code uses <code className="bg-green-100 px-1 rounded">print()</code>, the text appears here.
+                {t('workspace.console_empty_desc')}
               </p>
             </div>
           )}
@@ -401,13 +403,13 @@ export default function StudentWorkspace() {
           </div>
           {aiConfig?.mode && (
             <div className="px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
-              {aiConfig.mode === 'chat' ? 'Chat Mode' : aiConfig.mode === 'agent' ? 'Agent Mode' : 'Suggest Mode'}
+              {aiConfig.mode === 'chat' ? t('workspace.mode_chat') : aiConfig.mode === 'agent' ? t('workspace.mode_agent') : t('workspace.mode_suggest')}
             </div>
           )}
           {teacherViewing && (
             <div className="px-3 py-1 rounded-full bg-accent/20 text-accent-foreground text-xs font-bold flex items-center gap-2 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-accent" />
-              Teacher is viewing
+              {t('workspace.teacher_viewing')}
             </div>
           )}
         </div>
@@ -432,7 +434,7 @@ export default function StudentWorkspace() {
             disabled={helpReq.isPending}
             className="rounded-xl border-accent text-accent hover:bg-accent hover:text-accent-foreground"
           >
-            <Hand className="w-4 h-4 mr-2" /> Need Help
+            <Hand className="w-4 h-4 mr-2" /> {t('workspace.need_help')}
           </Button>
 
           {!isChatMode && isAiEnabled && (
@@ -506,7 +508,7 @@ export default function StudentWorkspace() {
                         <div className={PANEL_HEADER}>
                           <div className="flex items-center gap-2 min-w-0">
                             <Code className="w-4 h-4 shrink-0" />
-                            <span className="text-sm font-medium">Source Code</span>
+                            <span className="text-sm font-medium">{t('workspace.source_code')}</span>
                             {activeFile && (
                               <span className="text-primary-foreground/60 text-xs truncate">
                                 {activeFile.filename}{isDirty && ' •'}
@@ -520,18 +522,18 @@ export default function StudentWorkspace() {
                                   onClick={handleSave}
                                   disabled={!isDirty || updateFile.isPending}
                                   className={PANEL_HEADER_BTN}>
-                                  <Save className="w-3 h-3" /> Save
+                                  <Save className="w-3 h-3" /> {t('workspace.save')}
                                 </Button>
                                 {isRunning ? (
                                   <Button size="sm" onClick={stopCode}
                                     className="h-6 px-2 text-[11px] gap-1 bg-red-500 hover:bg-red-600 text-white border-0">
-                                    <Square className="w-3 h-3" /> Stop
+                                    <Square className="w-3 h-3" /> {t('workspace.stop')}
                                   </Button>
                                 ) : (
                                   <Button size="sm" onClick={handleRun}
                                     disabled={!activeFileId}
                                     className="h-6 px-2 text-[11px] gap-1 bg-green-500 hover:bg-green-600 text-white border-0">
-                                    <Play className="w-3 h-3" /> Run
+                                    <Play className="w-3 h-3" /> {t('workspace.run')}
                                   </Button>
                                 )}
                                 <div className="w-px h-4 bg-white/20 mx-0.5" />
@@ -540,12 +542,12 @@ export default function StudentWorkspace() {
                             {fullscreenPanel === 'code' ? (
                               <Button variant="ghost" size="sm" onClick={() => setFullscreenPanel(null)}
                                 className={PANEL_HEADER_BTN}>
-                                <Minimize2 className="w-3 h-3" /> Exit full screen
+                                <Minimize2 className="w-3 h-3" /> {t('workspace.exit_fullscreen')}
                               </Button>
                             ) : (
                               <Button variant="ghost" size="sm" onClick={() => setFullscreenPanel('code')}
                                 className={PANEL_HEADER_BTN}>
-                                <Maximize2 className="w-3 h-3" /> Full screen
+                                <Maximize2 className="w-3 h-3" /> {t('workspace.fullscreen')}
                               </Button>
                             )}
                           </div>

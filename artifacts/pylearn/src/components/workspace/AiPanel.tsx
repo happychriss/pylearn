@@ -9,6 +9,7 @@ import { useAcceptSuggestion, useRejectSuggestion } from '@workspace/api-client-
 import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import { useTranslation } from '@/lib/i18n';
 
 interface AiPanelProps {
   credits: number;
@@ -17,6 +18,7 @@ interface AiPanelProps {
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useTranslation();
   const handleCopy = () => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -24,12 +26,13 @@ function CopyButton({ text }: { text: string }) {
   };
   return (
     <button onClick={handleCopy} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors py-0.5 px-1 rounded hover:bg-muted ml-auto">
-      {copied ? <><Check className="w-3 h-3 text-green-500" />Copied</> : <><Copy className="w-3 h-3" />Copy</>}
+      {copied ? <><Check className="w-3 h-3 text-green-500" />{t('ai_panel.copied')}</> : <><Copy className="w-3 h-3" />{t('ai_panel.copy')}</>}
     </button>
   );
 }
 
 export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const { messages, sendMessage, isStreaming, removeSuggestion } = useChatStream();
   const noCredits = credits <= 0;
@@ -84,11 +87,11 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
       <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-accent" />
-          <h2 className="font-display font-semibold text-foreground">AI Assistant</h2>
+          <h2 className="font-display font-semibold text-foreground">{t('ai_panel.title')}</h2>
         </div>
         {noCredits
-          ? <span className="text-xs text-destructive font-medium">No credits</span>
-          : <span className="text-xs text-muted-foreground">{credits} credit{credits !== 1 ? 's' : ''}</span>}
+          ? <span className="text-xs text-destructive font-medium">{t('ai_panel.no_credits_badge')}</span>
+          : <span className="text-xs text-muted-foreground">{t(credits !== 1 ? 'ai_panel.credits_other' : 'ai_panel.credits_one', { count: credits })}</span>}
       </div>
 
       <div className="flex-1 overflow-hidden relative">
@@ -96,8 +99,8 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-4 text-muted-foreground">
               <Bot className="w-12 h-12 mb-3 opacity-20" />
-              <p>Hello! I'm your AI coding assistant.</p>
-              <p className="text-sm mt-1">Ask me to explain code, find bugs, or suggest improvements.</p>
+              <p>{t('ai_panel.welcome')}</p>
+              <p className="text-sm mt-1">{t('ai_panel.welcome_hint')}</p>
             </div>
           ) : (
             <AnimatePresence initial={false}>
@@ -174,13 +177,13 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
 
       <div className="p-3 bg-background border-t border-border">
         {noCredits && (
-          <p className="text-xs text-destructive text-center mb-2">No credits remaining — contact your teacher</p>
+          <p className="text-xs text-destructive text-center mb-2">{t('ai_panel.no_credits_hint')}</p>
         )}
         <form onSubmit={handleSend} className="relative flex items-center">
           <Input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={noCredits ? "No credits remaining" : "Ask a question..."}
+            placeholder={noCredits ? t('ai_panel.placeholder_no_credits') : t('ai_panel.placeholder')}
             className="pr-12 rounded-xl border-2 focus-visible:ring-primary/20"
             disabled={isStreaming || noCredits}
           />

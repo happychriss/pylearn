@@ -15,12 +15,14 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { useDisplayEvents } from '@/hooks/use-display-events';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from '@/lib/i18n';
 import type { Terminal as XTerm } from '@xterm/xterm';
 
 type ActiveTab = 'code' | 'output';
 
 export default function AdminWorkspaceView() {
   setSessionType('admin');
+  const { t } = useTranslation();
   const [, params] = useRoute('/admin/student/:id');
   const studentId = params?.id;
   const [, setLocation] = useLocation();
@@ -107,17 +109,17 @@ export default function AdminWorkspaceView() {
       <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 shrink-0 shadow-sm relative z-10">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => setLocation('/admin')}>
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back
+            <ArrowLeft className="w-4 h-4 mr-2" /> {t('admin_workspace.back')}
           </Button>
           <div className="font-display font-bold flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
-            Viewing: {student?.firstName} {student?.lastName}
+            {t('admin_workspace.viewing', { name: `${student?.firstName ?? ''} ${student?.lastName ?? ''}`.trim() })}
           </div>
         </div>
         
         <div className="flex items-center gap-4">
           <div className="bg-muted/50 px-4 py-1.5 rounded-full border border-border flex items-center gap-3">
-            <Label htmlFor="coedit-mode" className="font-semibold text-sm cursor-pointer">Co-Edit</Label>
+            <Label htmlFor="coedit-mode" className="font-semibold text-sm cursor-pointer">{t('admin_workspace.co_edit')}</Label>
             <Switch id="coedit-mode" checked={coEdit} onCheckedChange={setCoEdit} />
           </div>
           <Button
@@ -136,7 +138,7 @@ export default function AdminWorkspaceView() {
           <PanelGroup direction="horizontal">
             <Panel defaultSize={18} className="bg-sidebar border-r border-border flex flex-col">
               <div className="p-3 border-b border-border bg-sidebar-accent/50 font-semibold text-sm">
-                Files
+                {t('admin_workspace.files')}
               </div>
               <div className="p-2 space-y-1">
                 {files?.map(file => (
@@ -170,7 +172,7 @@ export default function AdminWorkspaceView() {
                         }`}
                       >
                         <Code className="w-4 h-4" />
-                        Source Code
+                        {t('admin_workspace.source_code')}
                       </button>
                       <button
                         onClick={() => handleTabChange('output')}
@@ -181,7 +183,7 @@ export default function AdminWorkspaceView() {
                         }`}
                       >
                         <Monitor className="w-4 h-4" />
-                        Output
+                        {t('admin_workspace.output')}
                         {hasNewEvent && activeTab !== 'output' && (
                           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
                         )}
@@ -192,7 +194,7 @@ export default function AdminWorkspaceView() {
                         <div className="h-full relative">
                           {!coEdit && (
                             <div className="absolute top-4 right-6 z-50 px-3 py-1 bg-yellow-500/90 text-white rounded-full text-xs font-bold shadow-lg pointer-events-none">
-                              READ ONLY
+                              {t('admin_workspace.read_only')}
                             </div>
                           )}
                           <EditorPanel readOnly={!coEdit} onContentChange={coEdit ? handleEditorChange : undefined} />
@@ -215,7 +217,7 @@ export default function AdminWorkspaceView() {
                 <Panel defaultSize={35} minSize={10}>
                   <div className="h-full flex flex-col bg-card border-t border-border">
                     <div className="px-4 py-2 border-b border-border bg-muted/30 text-sm font-medium text-muted-foreground">
-                      Student Terminal (read-only)
+                      {t('admin_workspace.terminal_label')}
                     </div>
                     <div className="flex-1 overflow-hidden bg-[#0f172a]">
                       <Terminal terminalRef={terminalRef} readOnly />

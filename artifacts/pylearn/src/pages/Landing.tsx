@@ -7,6 +7,7 @@ import { BookOpen, Sparkles, Code2, Users, GraduationCap, ShieldCheck } from 'lu
 import { APP_VERSION } from '@/lib/version';
 import { useGetMyProfile } from '@workspace/api-client-react';
 import { setSessionType } from '@/lib/session-type';
+import { useTranslation } from '@/lib/i18n';
 
 const PIN_LENGTH = 6;
 
@@ -96,6 +97,7 @@ function PinInput({ value, onChange, onComplete, disabled }: {
 
 export default function Landing() {
   setSessionType('admin');
+  const { t } = useTranslation();
   const { isAuthenticated, login, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { data: profile } = useGetMyProfile({ query: { enabled: isAuthenticated } });
@@ -141,7 +143,7 @@ export default function Landing() {
   };
 
   if (isLoading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>;
+    return <div className="min-h-screen bg-background flex items-center justify-center">{t('common.loading')}</div>;
   }
 
   return (
@@ -163,16 +165,23 @@ export default function Landing() {
         <main className="mt-12 text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary font-medium text-sm mb-6 border border-primary/20">
             <Sparkles className="w-4 h-4" />
-            <span>Interactive Python Classroom</span>
+            <span>{t('landing.badge')}</span>
           </div>
-          
-          <h1 className="text-5xl sm:text-7xl font-display font-extrabold text-foreground leading-tight mb-6">
-            Learn Python with <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">Superpowers</span>
+
+          <h1 className="text-4xl sm:text-6xl font-display font-extrabold leading-[1.15] mb-8 tracking-tight">
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/70">
+              {t('landing.headline_1')}
+            </span>
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-accent via-accent/90 to-accent/70">
+              {t('landing.headline_2')}
+            </span>
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-[hsl(185,65%,28%)] to-primary">
+              {t('landing.headline_3')}
+            </span>
           </h1>
-          
-          <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-            A beautiful, intelligent workspace for students to code, explore, and get instant AI help—all visible to the teacher in real-time.
+
+          <p className="text-lg sm:text-xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">
+            {t('landing.subtitle')}
           </p>
 
           <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto mb-16">
@@ -180,11 +189,11 @@ export default function Landing() {
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <GraduationCap className="w-7 h-7 text-primary" />
               </div>
-              <h2 className="text-lg font-bold mb-4">I'm a Student</h2>
-              
+              <h2 className="text-lg font-bold mb-4">{t('landing.student_title')}</h2>
+
               <div className="space-y-3">
                 <Input
-                  placeholder="Your name"
+                  placeholder={t('landing.student_name_placeholder')}
                   value={studentName}
                   onChange={e => setStudentName(e.target.value)}
                   className="text-center"
@@ -204,7 +213,7 @@ export default function Landing() {
                   disabled={studentLoading || !studentName.trim() || pin.length !== 6}
                   className="w-full h-12 rounded-2xl bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl transition-all"
                 >
-                  {studentLoading ? 'Logging in...' : 'Enter Classroom'}
+                  {studentLoading ? t('landing.student_login_loading') : t('landing.student_login_btn')}
                 </Button>
               </div>
             </div>
@@ -213,32 +222,32 @@ export default function Landing() {
               <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
                 <ShieldCheck className="w-7 h-7 text-muted-foreground" />
               </div>
-              <h2 className="text-lg font-bold mb-4">I'm a Teacher</h2>
+              <h2 className="text-lg font-bold mb-4">{t('landing.teacher_title')}</h2>
               {isAuthenticated && profile?.role === 'admin' ? (
                 <>
                   <p className="text-sm text-muted-foreground mb-6 flex-1">
-                    Welcome back, {profile.firstName || 'Teacher'}!
+                    {t('landing.teacher_welcome', { name: profile.firstName || 'Teacher' })}
                   </p>
                   <Button
                     onClick={() => setLocation('/admin')}
                     className="w-full h-12 rounded-2xl"
                   >
-                    Go to Dashboard
+                    {t('landing.teacher_go_dashboard')}
                   </Button>
                 </>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground mb-6 flex-1">
                     {isLocalMode
-                      ? 'Click to sign in as the local teacher.'
-                      : 'Sign in with your Google account to access the admin dashboard.'}
+                      ? t('landing.teacher_local_hint')
+                      : t('landing.teacher_google_hint')}
                   </p>
                   <Button
                     onClick={login}
                     variant="outline"
                     className="w-full h-12 rounded-2xl"
                   >
-                    {isLocalMode ? 'Log in' : 'Sign In with Google'}
+                    {isLocalMode ? t('landing.teacher_local_login') : t('landing.teacher_google_login')}
                   </Button>
                 </>
               )}
@@ -248,18 +257,18 @@ export default function Landing() {
           <div className="grid sm:grid-cols-3 gap-8 text-left">
             <div className="p-6 rounded-3xl bg-card border border-border shadow-sm">
               <Code2 className="w-10 h-10 text-primary mb-4" />
-              <h3 className="font-bold text-lg mb-2">Browser-Based Editor</h3>
-              <p className="text-muted-foreground">Code in Python, run text adventures, and build graphical games right in the browser.</p>
+              <h3 className="font-bold text-lg mb-2">{t('landing.feature1_title')}</h3>
+              <p className="text-muted-foreground">{t('landing.feature1_desc')}</p>
             </div>
             <div className="p-6 rounded-3xl bg-card border border-border shadow-sm">
               <Sparkles className="w-10 h-10 text-accent mb-4" />
-              <h3 className="font-bold text-lg mb-2">Smart AI Assistant</h3>
-              <p className="text-muted-foreground">Get help when you're stuck with visual code diffs that you can review and accept.</p>
+              <h3 className="font-bold text-lg mb-2">{t('landing.feature2_title')}</h3>
+              <p className="text-muted-foreground">{t('landing.feature2_desc')}</p>
             </div>
             <div className="p-6 rounded-3xl bg-card border border-border shadow-sm">
               <Users className="w-10 h-10 text-secondary-foreground mb-4" />
-              <h3 className="font-bold text-lg mb-2">Live Teacher Help</h3>
-              <p className="text-muted-foreground">Teachers can jump into your workspace and co-edit code in real-time to guide you.</p>
+              <h3 className="font-bold text-lg mb-2">{t('landing.feature3_title')}</h3>
+              <p className="text-muted-foreground">{t('landing.feature3_desc')}</p>
             </div>
           </div>
         </main>

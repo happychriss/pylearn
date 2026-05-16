@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { BookOpen, Settings, Users, AlertCircle, LogOut, UserPlus, Pause, Play, Trash2, Copy, Check, Plus, FileCode, ChevronDown, Library, ChevronRight, MessageCircle, RotateCcw, FileText, Eye, EyeOff, Pencil } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useTranslation } from '@/lib/i18n';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { toast } from '@/hooks/use-toast';
 
@@ -50,6 +51,7 @@ interface AiConfigForm {
 }
 
 function CheatSheetsTab() {
+  const { t } = useTranslation();
   const { data: sheets = [], isLoading, refetch } = useListCheatSheets();
   const createSheet = useCreateCheatSheet();
   const updateSheet = useUpdateCheatSheet();
@@ -73,7 +75,7 @@ function CheatSheetsTab() {
   };
 
   const handleDelete = (id: number) => {
-    if (!confirm('Delete this cheat sheet?')) return;
+    if (!confirm(t('admin.sheets_delete_confirm'))) return;
     deleteSheet.mutate({ id }, { onSuccess: refetch });
   };
 
@@ -83,22 +85,22 @@ function CheatSheetsTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            {editing.id ? 'Edit Cheat Sheet' : 'New Cheat Sheet'}
+            {editing.id ? t('admin.sheets_edit_title') : t('admin.sheets_new_title')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-3">
             <div className="flex-1">
-              <Label className="text-xs mb-1 block">Title</Label>
+              <Label className="text-xs mb-1 block">{t('admin.sheets_title_label')}</Label>
               <Input value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} placeholder="Python Basics" />
             </div>
             <div className="w-24">
-              <Label className="text-xs mb-1 block">Order</Label>
+              <Label className="text-xs mb-1 block">{t('admin.sheets_order_label')}</Label>
               <Input type="number" value={editing.sortOrder} onChange={e => setEditing({ ...editing, sortOrder: parseInt(e.target.value) || 0 })} />
             </div>
           </div>
           <div>
-            <Label className="text-xs mb-1 block">Content (Markdown)</Label>
+            <Label className="text-xs mb-1 block">{t('admin.sheets_content_label')}</Label>
             <Textarea
               value={editing.content}
               onChange={e => setEditing({ ...editing, content: e.target.value })}
@@ -107,8 +109,8 @@ function CheatSheetsTab() {
             />
           </div>
           <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={createSheet.isPending || updateSheet.isPending}>Save</Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>{t('common.cancel')}</Button>
+            <Button onClick={handleSave} disabled={createSheet.isPending || updateSheet.isPending}>{t('common.save')}</Button>
           </div>
         </CardContent>
       </Card>
@@ -119,16 +121,16 @@ function CheatSheetsTab() {
     <Card className="shadow-md">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Cheat Sheets</CardTitle>
-          <CardDescription>Active sheets appear as buttons in the student header</CardDescription>
+          <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t('admin.sheets_title')}</CardTitle>
+          <CardDescription>{t('admin.sheets_desc')}</CardDescription>
         </div>
         <Button size="sm" onClick={() => setEditing({ title: '', content: '', sortOrder: 0 })}>
-          <Plus className="w-4 h-4 mr-1" /> New Sheet
+          <Plus className="w-4 h-4 mr-1" /> {t('admin.sheets_new')}
         </Button>
       </CardHeader>
       <CardContent>
-        {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : sheets.length === 0 ? (
-          <p className="text-muted-foreground text-sm text-center py-8">No cheat sheets yet. Click "New Sheet" to create one.</p>
+        {isLoading ? <p className="text-muted-foreground text-sm">{t('admin.sheets_loading')}</p> : sheets.length === 0 ? (
+          <p className="text-muted-foreground text-sm text-center py-8">{t('admin.sheets_empty')}</p>
         ) : (
           <div className="space-y-2">
             {sheets.map(sheet => (
@@ -143,10 +145,10 @@ function CheatSheetsTab() {
                     variant="ghost" size="sm"
                     onClick={() => handleToggle(sheet.id)}
                     className={sheet.isActive ? 'text-green-600 hover:text-green-700' : 'text-muted-foreground'}
-                    title={sheet.isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                    title={sheet.isActive ? t('admin.sheets_active') : t('admin.sheets_hidden')}
                   >
                     {sheet.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    <span className="ml-1 text-xs">{sheet.isActive ? 'Active' : 'Hidden'}</span>
+                    <span className="ml-1 text-xs">{sheet.isActive ? t('admin.sheets_active') : t('admin.sheets_hidden')}</span>
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => setEditing({ id: sheet.id, title: sheet.title, content: sheet.content, sortOrder: sheet.sortOrder })}>
                     <Pencil className="w-4 h-4" />
@@ -166,6 +168,7 @@ function CheatSheetsTab() {
 
 export default function AdminDashboard() {
   setSessionType('admin');
+  const { t } = useTranslation();
   const { logout, user, isLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -283,7 +286,7 @@ export default function AdminDashboard() {
   }, [on, queryClient]);
 
   if (isLoading) {
-    return <div className="h-screen w-full flex items-center justify-center bg-background text-muted-foreground">Loading...</div>;
+    return <div className="h-screen w-full flex items-center justify-center bg-background text-muted-foreground">{t('common.loading')}</div>;
   }
   if (!isAuthenticated) return null;
 
@@ -487,12 +490,12 @@ export default function AdminDashboard() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
               <BookOpen className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-display font-bold">PyLearn Admin</h1>
+            <h1 className="text-xl font-display font-bold">{t('admin.title')}</h1>
             <span className="text-[10px] text-muted-foreground font-mono self-center">{APP_VERSION}</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm font-medium">{user?.firstName} (Teacher)</span>
-            <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 mr-2"/> Logout</Button>
+            <span className="text-sm font-medium">{user?.firstName} ({t('admin.teacher_label')})</span>
+            <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 mr-2"/> {t('common.logout')}</Button>
           </div>
         </div>
       </header>
@@ -500,12 +503,12 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="grid w-full grid-cols-6 mb-8">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="students">Students</TabsTrigger>
-            <TabsTrigger value="programs">Programs</TabsTrigger>
-            <TabsTrigger value="prompts">Prompts</TabsTrigger>
-            <TabsTrigger value="cheatsheets">Cheat Sheets</TabsTrigger>
-            <TabsTrigger value="settings">AI Settings</TabsTrigger>
+            <TabsTrigger value="overview">{t('admin.tab_overview')}</TabsTrigger>
+            <TabsTrigger value="students">{t('admin.tab_students')}</TabsTrigger>
+            <TabsTrigger value="programs">{t('admin.tab_programs')}</TabsTrigger>
+            <TabsTrigger value="prompts">{t('admin.tab_prompts')}</TabsTrigger>
+            <TabsTrigger value="cheatsheets">{t('admin.tab_cheatsheets')}</TabsTrigger>
+            <TabsTrigger value="settings">{t('admin.tab_settings')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -513,12 +516,12 @@ export default function AdminDashboard() {
               <Card className="border-accent/20 shadow-md">
                 <CardHeader className="bg-accent/5 border-b border-accent/10 pb-4">
                   <CardTitle className="flex items-center gap-2 text-accent-foreground">
-                    <AlertCircle className="w-5 h-5 text-accent" /> Active Help Requests
+                    <AlertCircle className="w-5 h-5 text-accent" /> {t('admin.help_title')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {(!requests || requests.length === 0) ? (
-                    <div className="p-8 text-center text-muted-foreground text-sm">No active requests. Good job!</div>
+                    <div className="p-8 text-center text-muted-foreground text-sm">{t('admin.help_empty')}</div>
                   ) : (
                     <div className="divide-y divide-border">
                       {requests.filter(r => r.status === 'active').map(req => (
@@ -529,8 +532,8 @@ export default function AdminDashboard() {
                             <p className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(new Date(req.createdAt))} ago</p>
                           </div>
                           <div className="flex gap-2">
-                            <Button size="sm" onClick={() => setLocation(`/admin/student/${req.userId}`)}>Join Workspace</Button>
-                            <Button size="sm" variant="outline" onClick={() => dismissReq.mutate({ id: req.id })}>Dismiss</Button>
+                            <Button size="sm" onClick={() => setLocation(`/admin/student/${req.userId}`)}>{t('admin.help_join')}</Button>
+                            <Button size="sm" variant="outline" onClick={() => dismissReq.mutate({ id: req.id })}>{t('admin.help_dismiss')}</Button>
                           </div>
                         </div>
                       ))}
@@ -541,7 +544,7 @@ export default function AdminDashboard() {
 
               <Card className="shadow-md">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5"/> Class Roster</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5"/> {t('admin.roster_title')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 gap-4">
@@ -557,16 +560,16 @@ export default function AdminDashboard() {
                           </div>
                           <div>
                             <p className="font-semibold text-sm">{student.firstName} {student.lastName}</p>
-                            {student.hasHelpRequest && <Badge variant="destructive" className="mt-1 text-[10px]">Needs Help</Badge>}
+                            {student.hasHelpRequest && <Badge variant="destructive" className="mt-1 text-[10px]">{t('admin.roster_needs_help')}</Badge>}
                           </div>
                         </div>
                         <Button variant="secondary" size="sm" onClick={() => setLocation(`/admin/student/${student.id}`)}>
-                          View
+                          {t('admin.roster_view')}
                         </Button>
                       </div>
                     ))}
                     {(!students || students.length === 0) && (
-                      <div className="p-8 text-center text-muted-foreground text-sm">No students yet.</div>
+                      <div className="p-8 text-center text-muted-foreground text-sm">{t('admin.roster_empty')}</div>
                     )}
                   </div>
                 </CardContent>
@@ -578,37 +581,37 @@ export default function AdminDashboard() {
             <Card className="shadow-md">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5"/> Student Accounts</CardTitle>
-                  <CardDescription>Create and manage student PIN-based accounts</CardDescription>
+                  <CardTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5"/> {t('admin.students_title')}</CardTitle>
+                  <CardDescription>{t('admin.students_desc')}</CardDescription>
                 </div>
                 <Button onClick={() => { setShowCreateForm(true); setCreatedPin(null); }}>
-                  <UserPlus className="w-4 h-4 mr-2" /> Create Student
+                  <UserPlus className="w-4 h-4 mr-2" /> {t('admin.students_create_btn')}
                 </Button>
               </CardHeader>
               <CardContent>
                 {showCreateForm && (
                   <div className="mb-6 p-4 rounded-xl border-2 border-primary/20 bg-primary/5">
-                    <h3 className="font-semibold mb-3">New Student</h3>
+                    <h3 className="font-semibold mb-3">{t('admin.students_new_section')}</h3>
                     <div className="flex gap-3">
                       <Input
-                        placeholder="Student name"
+                        placeholder={t('admin.students_name_placeholder')}
                         value={newStudentName}
                         onChange={e => setNewStudentName(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleCreateStudent()}
                         className="max-w-xs"
                       />
                       <Button onClick={handleCreateStudent} disabled={createStudent.isPending || !newStudentName.trim()}>
-                        {createStudent.isPending ? 'Creating...' : 'Create'}
+                        {createStudent.isPending ? t('admin.students_creating') : t('common.create')}
                       </Button>
-                      <Button variant="ghost" onClick={() => setShowCreateForm(false)}>Cancel</Button>
+                      <Button variant="ghost" onClick={() => setShowCreateForm(false)}>{t('common.cancel')}</Button>
                     </div>
                   </div>
                 )}
 
                 {createdPin && (
                   <div className="mb-6 p-4 rounded-xl border-2 border-green-500/30 bg-green-50 dark:bg-green-950/20">
-                    <h3 className="font-semibold text-green-700 dark:text-green-400 mb-2">Account Created!</h3>
-                    <p className="text-sm mb-2">Give this PIN to <strong>{createdPin.name}</strong>:</p>
+                    <h3 className="font-semibold text-green-700 dark:text-green-400 mb-2">{t('admin.students_account_created')}</h3>
+                    <p className="text-sm mb-2">{t('admin.students_pin_hint', { name: createdPin.name })}</p>
                     <div className="flex items-center gap-3">
                       <span className="text-3xl font-mono font-bold tracking-[0.3em] bg-white dark:bg-slate-800 px-4 py-2 rounded-lg border">{createdPin.pin}</span>
                       <Button
@@ -619,7 +622,7 @@ export default function AdminDashboard() {
                         {copiedPin === 'new' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">The PIN is also always visible on the student's card below.</p>
+                    <p className="text-xs text-muted-foreground mt-2">{t('admin.students_pin_note')}</p>
                   </div>
                 )}
 
@@ -636,7 +639,7 @@ export default function AdminDashboard() {
                           <div>
                             <p className="font-semibold">{account.displayName}</p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-muted-foreground">PIN:</span>
+                              <span className="text-xs text-muted-foreground">{t('admin.students_pin_label')}</span>
                               <span className="text-sm font-mono font-bold tracking-wider">{account.pin}</span>
                               <Button
                                 variant="ghost"
@@ -647,7 +650,7 @@ export default function AdminDashboard() {
                                 {copiedPin === account.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                               </Button>
                             </div>
-                            <p className="text-xs text-muted-foreground">Created {formatDistanceToNow(new Date(account.createdAt))} ago</p>
+                            <p className="text-xs text-muted-foreground">{t('admin.students_created_ago', { time: formatDistanceToNow(new Date(account.createdAt)) })}</p>
                           </div>
                         </div>
                         <Badge
@@ -657,17 +660,17 @@ export default function AdminDashboard() {
                             : "bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-400 dark:border-green-700"
                           }
                         >
-                          {account.isPaused ? 'Paused' : 'Active'}
+                          {account.isPaused ? t('admin.students_paused') : t('admin.students_active')}
                         </Badge>
                         <div className="flex items-center gap-1.5 ml-2">
                           <Badge variant="outline" className={account.aiCredits === 0 ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-700' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-700'}>
-                            {account.aiCredits} credits
+                            {account.aiCredits} {t('admin.credits_label')}
                           </Badge>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-6 w-6 p-0"
-                            title="Reset credits to 10"
+                            title={t('admin.credits_reset_title')}
                             onClick={() => handleResetCredits(account.id, account.displayName)}
                             disabled={updateCredits.isPending}
                           >
@@ -684,7 +687,7 @@ export default function AdminDashboard() {
                             onClick={() => handleTogglePause(account.id, false)}
                             disabled={togglePause.isPending}
                           >
-                            <Play className="w-4 h-4 mr-1" /> Resume
+                            <Play className="w-4 h-4 mr-1" /> {t('admin.students_resume')}
                           </Button>
                         ) : (
                           <Button
@@ -694,21 +697,21 @@ export default function AdminDashboard() {
                             onClick={() => handleTogglePause(account.id, true)}
                             disabled={togglePause.isPending}
                           >
-                            <Pause className="w-4 h-4 mr-1" /> Pause
+                            <Pause className="w-4 h-4 mr-1" /> {t('admin.students_pause')}
                           </Button>
                         )}
                         {deleteConfirm === account.id ? (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-destructive font-medium">Permanently delete this student and all their work?</span>
+                            <span className="text-xs text-destructive font-medium">{t('admin.students_delete_confirm')}</span>
                             <Button
                               size="sm"
                               variant="destructive"
                               onClick={() => handleDeleteStudent(account.id)}
                               disabled={deleteStudent.isPending}
                             >
-                              Confirm
+                              {t('common.confirm')}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</Button>
                           </div>
                         ) : (
                           <Button
@@ -726,10 +729,10 @@ export default function AdminDashboard() {
                   {(!studentAccounts || studentAccounts.length === 0) && !showCreateForm && (
                     <div className="p-12 text-center text-muted-foreground">
                       <UserPlus className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                      <p className="text-lg font-medium mb-2">No student accounts yet</p>
-                      <p className="text-sm mb-4">Create accounts for your students so they can log in with a name and PIN.</p>
+                      <p className="text-lg font-medium mb-2">{t('admin.students_empty')}</p>
+                      <p className="text-sm mb-4">{t('admin.students_empty_desc')}</p>
                       <Button onClick={() => setShowCreateForm(true)}>
-                        <UserPlus className="w-4 h-4 mr-2" /> Create First Student
+                        <UserPlus className="w-4 h-4 mr-2" /> {t('admin.students_create_first')}
                       </Button>
                     </div>
                   )}
@@ -745,23 +748,23 @@ export default function AdminDashboard() {
             }}>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>New Program</DialogTitle>
-                  <DialogDescription>Give it a filename and write or paste your Python code.</DialogDescription>
+                  <DialogTitle>{t('admin.programs_dialog_title')}</DialogTitle>
+                  <DialogDescription>{t('admin.programs_dialog_desc')}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="prog-filename">Filename</Label>
+                    <Label htmlFor="prog-filename">{t('admin.programs_filename_label')}</Label>
                     <Input
                       id="prog-filename"
-                      placeholder="e.g. hello_world"
+                      placeholder={t('admin.programs_filename_placeholder')}
                       value={newProgramFilename}
                       onChange={e => setNewProgramFilename(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !savingProgram && handleSaveProgram()}
                     />
-                    <p className="text-xs text-muted-foreground">.py will be added automatically if omitted</p>
+                    <p className="text-xs text-muted-foreground">{t('admin.programs_filename_hint')}</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="prog-content">Code</Label>
+                    <Label htmlFor="prog-content">{t('admin.programs_code_label')}</Label>
                     <Textarea
                       id="prog-content"
                       placeholder="# write your Python code here"
@@ -772,9 +775,9 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setNewProgramOpen(false)} disabled={savingProgram}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setNewProgramOpen(false)} disabled={savingProgram}>{t('common.cancel')}</Button>
                   <Button onClick={handleSaveProgram} disabled={savingProgram || !newProgramFilename.trim()}>
-                    {savingProgram ? 'Saving...' : 'Save Program'}
+                    {savingProgram ? t('admin.programs_saving') : t('admin.programs_save')}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -783,15 +786,15 @@ export default function AdminDashboard() {
             <Card className="shadow-md">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2"><FileCode className="w-5 h-5"/> Programs Library</CardTitle>
-                  <CardDescription>Create programs and assign them to students</CardDescription>
+                  <CardTitle className="flex items-center gap-2"><FileCode className="w-5 h-5"/> {t('admin.programs_title')}</CardTitle>
+                  <CardDescription>{t('admin.programs_desc')}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={handleSeedDemos} disabled={seedingDemos}>
-                    <BookOpen className="w-4 h-4 mr-2" /> {seedingDemos ? 'Loading...' : 'Load Demos'}
+                    <BookOpen className="w-4 h-4 mr-2" /> {seedingDemos ? t('admin.programs_loading') : t('admin.programs_load_demos')}
                   </Button>
                   <Button onClick={() => setNewProgramOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> New Program
+                    <Plus className="w-4 h-4 mr-2" /> {t('admin.programs_new')}
                   </Button>
                 </div>
               </CardHeader>
@@ -801,8 +804,8 @@ export default function AdminDashboard() {
                 ) : programs.length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground">
                     <FileCode className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                    <p className="text-lg font-medium mb-2">No programs yet</p>
-                    <p className="text-sm">Create programs using the button above to build your library. Then assign them to students.</p>
+                    <p className="text-lg font-medium mb-2">{t('admin.programs_empty')}</p>
+                    <p className="text-sm">{t('admin.programs_empty_desc')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -815,7 +818,7 @@ export default function AdminDashboard() {
                           <div>
                             <p className="font-semibold text-sm">{program.filename}</p>
                             <p className="text-xs text-muted-foreground">
-                              Uploaded {formatDistanceToNow(new Date(program.createdAt))} ago
+                              {t('admin.programs_uploaded_ago', { time: formatDistanceToNow(new Date(program.createdAt)) })}
                             </p>
                           </div>
                         </div>
@@ -828,7 +831,7 @@ export default function AdminDashboard() {
                               className="text-primary border-primary/30 hover:bg-primary/10"
                               onClick={() => setAssigningProgram(assigningProgram === program.id ? null : program.id)}
                             >
-                              Assign <ChevronDown className="w-3 h-3 ml-1" />
+                              {t('admin.programs_assign')} <ChevronDown className="w-3 h-3 ml-1" />
                             </Button>
                             {assigningProgram === program.id && (
                               <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-xl shadow-lg min-w-[180px] overflow-hidden">
@@ -846,7 +849,7 @@ export default function AdminDashboard() {
                                     </button>
                                   ))
                                 ) : (
-                                  <div className="px-4 py-3 text-xs text-muted-foreground">No students yet</div>
+                                  <div className="px-4 py-3 text-xs text-muted-foreground">{t('admin.programs_no_students')}</div>
                                 )}
                               </div>
                             )}
@@ -854,9 +857,9 @@ export default function AdminDashboard() {
 
                           {deleteProgramConfirm === program.id ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-destructive font-medium">Delete?</span>
-                              <Button size="sm" variant="destructive" onClick={() => handleDeleteProgram(program.id)}>Yes</Button>
-                              <Button size="sm" variant="ghost" onClick={() => setDeleteProgramConfirm(null)}>No</Button>
+                              <span className="text-xs text-destructive font-medium">{t('admin.delete_confirm_label')}</span>
+                              <Button size="sm" variant="destructive" onClick={() => handleDeleteProgram(program.id)}>{t('common.yes')}</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setDeleteProgramConfirm(null)}>{t('common.no')}</Button>
                             </div>
                           ) : (
                             <Button
@@ -884,25 +887,25 @@ export default function AdminDashboard() {
             }}>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>New Prompt</DialogTitle>
-                  <DialogDescription>Create a prompt template that can be assigned to students in AI Chat mode.</DialogDescription>
+                  <DialogTitle>{t('admin.prompts_dialog_title')}</DialogTitle>
+                  <DialogDescription>{t('admin.prompts_dialog_desc')}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="prompt-title">Title</Label>
+                    <Label htmlFor="prompt-title">{t('admin.prompts_title_label')}</Label>
                     <Input
                       id="prompt-title"
-                      placeholder="e.g. Explain how AI works"
+                      placeholder={t('admin.prompts_title_placeholder')}
                       value={newPromptTitle}
                       onChange={e => setNewPromptTitle(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !savingPrompt && handleSavePrompt()}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="prompt-content">Prompt Content</Label>
+                    <Label htmlFor="prompt-content">{t('admin.prompts_content_label')}</Label>
                     <Textarea
                       id="prompt-content"
-                      placeholder="Write the prompt text that will be sent to the AI..."
+                      placeholder={t('admin.prompts_content_placeholder')}
                       className="min-h-[240px] text-sm"
                       value={newPromptContent}
                       onChange={e => setNewPromptContent(e.target.value)}
@@ -910,9 +913,9 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setNewPromptOpen(false)} disabled={savingPrompt}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setNewPromptOpen(false)} disabled={savingPrompt}>{t('common.cancel')}</Button>
                   <Button onClick={handleSavePrompt} disabled={savingPrompt || !newPromptTitle.trim()}>
-                    {savingPrompt ? 'Saving...' : 'Save Prompt'}
+                    {savingPrompt ? t('admin.prompts_saving') : t('admin.prompts_save')}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -921,11 +924,11 @@ export default function AdminDashboard() {
             <Card className="shadow-md">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2"><MessageCircle className="w-5 h-5"/> Prompts Library</CardTitle>
-                  <CardDescription>Create prompts and assign them to students for AI Chat mode</CardDescription>
+                  <CardTitle className="flex items-center gap-2"><MessageCircle className="w-5 h-5"/> {t('admin.prompts_title')}</CardTitle>
+                  <CardDescription>{t('admin.prompts_desc')}</CardDescription>
                 </div>
                 <Button onClick={() => setNewPromptOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> New Prompt
+                  <Plus className="w-4 h-4 mr-2" /> {t('admin.prompts_new')}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -934,8 +937,8 @@ export default function AdminDashboard() {
                 ) : prompts.length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground">
                     <MessageCircle className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                    <p className="text-lg font-medium mb-2">No prompts yet</p>
-                    <p className="text-sm">Create prompts using the button above. Assign them to students to appear in their AI Chat sidebar.</p>
+                    <p className="text-lg font-medium mb-2">{t('admin.prompts_empty')}</p>
+                    <p className="text-sm">{t('admin.prompts_empty_desc')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -959,7 +962,7 @@ export default function AdminDashboard() {
                               className="text-primary border-primary/30 hover:bg-primary/10"
                               onClick={() => setAssigningPrompt(assigningPrompt === prompt.id ? null : prompt.id)}
                             >
-                              Assign <ChevronDown className="w-3 h-3 ml-1" />
+                              {t('admin.programs_assign')} <ChevronDown className="w-3 h-3 ml-1" />
                             </Button>
                             {assigningPrompt === prompt.id && (
                               <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-xl shadow-lg min-w-[180px] overflow-hidden">
@@ -977,7 +980,7 @@ export default function AdminDashboard() {
                                     </button>
                                   ))
                                 ) : (
-                                  <div className="px-4 py-3 text-xs text-muted-foreground">No students yet</div>
+                                  <div className="px-4 py-3 text-xs text-muted-foreground">{t('admin.programs_no_students')}</div>
                                 )}
                               </div>
                             )}
@@ -985,9 +988,9 @@ export default function AdminDashboard() {
 
                           {deletePromptConfirm === prompt.id ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-destructive font-medium">Delete?</span>
-                              <Button size="sm" variant="destructive" onClick={() => handleDeletePrompt(prompt.id)}>Yes</Button>
-                              <Button size="sm" variant="ghost" onClick={() => setDeletePromptConfirm(null)}>No</Button>
+                              <span className="text-xs text-destructive font-medium">{t('admin.delete_confirm_label')}</span>
+                              <Button size="sm" variant="destructive" onClick={() => handleDeletePrompt(prompt.id)}>{t('common.yes')}</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setDeletePromptConfirm(null)}>{t('common.no')}</Button>
                             </div>
                           ) : (
                             <Button
@@ -1015,27 +1018,27 @@ export default function AdminDashboard() {
           <TabsContent value="settings">
             <Card className="shadow-md max-w-2xl">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5"/> AI Configuration</CardTitle>
-                <CardDescription>Control the assistant's behavior</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5"/> {t('admin.ai_title')}</CardTitle>
+                <CardDescription>{t('admin.ai_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
-                {configLoading || !formData ? <div className="p-4 text-center">Loading...</div> : (
+                {configLoading || !formData ? <div className="p-4 text-center">{t('common.loading')}</div> : (
                   <div className="space-y-6">
                     <div className="space-y-2">
-                      <Label>Global AI Mode</Label>
+                      <Label>{t('admin.ai_mode_label')}</Label>
                       <Select value={formData.mode} onValueChange={v => setFormData({...formData, mode: v})}>
                         <SelectTrigger><SelectValue/></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="off">OFF (Disabled)</SelectItem>
-                          <SelectItem value="suggestion">SUGGESTION (Hints &amp; Explanations)</SelectItem>
-                          <SelectItem value="agent">AGENT (Code Changes + Diffs)</SelectItem>
-                          <SelectItem value="chat">CHAT (Full-Screen AI Chat)</SelectItem>
+                          <SelectItem value="off">{t('admin.ai_mode_off')}</SelectItem>
+                          <SelectItem value="suggestion">{t('admin.ai_mode_suggestion')}</SelectItem>
+                          <SelectItem value="agent">{t('admin.ai_mode_agent')}</SelectItem>
+                          <SelectItem value="chat">{t('admin.ai_mode_chat')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Provider</Label>
+                      <Label>{t('admin.ai_provider_label')}</Label>
                       <Select value={formData.provider} onValueChange={v => setFormData({...formData, provider: v})}>
                         <SelectTrigger><SelectValue/></SelectTrigger>
                         <SelectContent>
@@ -1048,28 +1051,28 @@ export default function AdminDashboard() {
 
                     {formData.provider !== 'openai' && (
                       <div className="space-y-2">
-                        <Label>API Key (for {formData.provider})</Label>
+                        <Label>{t('admin.ai_apikey_label', { provider: formData.provider })}</Label>
                         <input
                           type="password"
                           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          placeholder="Enter API key..."
+                          placeholder={t('admin.ai_apikey_placeholder')}
                           value={formData.apiKey}
                           onChange={e => setFormData({...formData, apiKey: e.target.value})}
                         />
-                        <p className="text-xs text-muted-foreground">Enter key directly or use ENV:VAR_NAME to reference an environment variable. Leave blank to keep existing.</p>
+                        <p className="text-xs text-muted-foreground">{t('admin.ai_apikey_hint')}</p>
                       </div>
                     )}
 
                     <Tabs defaultValue="suggestion" className="w-full">
                       <TabsList className="grid w-full grid-cols-4">
-                        <TabsTrigger value="suggestion">Suggest</TabsTrigger>
-                        <TabsTrigger value="agent">Agent</TabsTrigger>
-                        <TabsTrigger value="chat">Chat</TabsTrigger>
-                        <TabsTrigger value="off">Off</TabsTrigger>
+                        <TabsTrigger value="suggestion">{t('admin.ai_tab_suggest')}</TabsTrigger>
+                        <TabsTrigger value="agent">{t('admin.ai_tab_agent')}</TabsTrigger>
+                        <TabsTrigger value="chat">{t('admin.ai_tab_chat')}</TabsTrigger>
+                        <TabsTrigger value="off">{t('admin.ai_tab_off')}</TabsTrigger>
                       </TabsList>
                       <div className="mt-4">
                         <TabsContent value="suggestion" className="space-y-2 m-0">
-                          <Label className="text-xs">System Prompt (Suggestion Mode)</Label>
+                          <Label className="text-xs">{t('admin.ai_prompt_suggest')}</Label>
                           <Textarea
                             className="min-h-[200px] text-xs font-mono"
                             value={formData.suggestionSystemPrompt}
@@ -1077,7 +1080,7 @@ export default function AdminDashboard() {
                           />
                         </TabsContent>
                         <TabsContent value="agent" className="space-y-2 m-0">
-                          <Label className="text-xs">System Prompt (Agent Mode)</Label>
+                          <Label className="text-xs">{t('admin.ai_prompt_agent')}</Label>
                           <Textarea
                             className="min-h-[200px] text-xs font-mono"
                             value={formData.agentSystemPrompt}
@@ -1085,16 +1088,16 @@ export default function AdminDashboard() {
                           />
                         </TabsContent>
                         <TabsContent value="chat" className="space-y-2 m-0">
-                          <Label className="text-xs">System Prompt (Chat Mode)</Label>
+                          <Label className="text-xs">{t('admin.ai_prompt_chat')}</Label>
                           <Textarea
                             className="min-h-[200px] text-xs font-mono"
                             value={formData.chatSystemPrompt}
                             onChange={e => setFormData({...formData, chatSystemPrompt: e.target.value})}
                           />
-                          <p className="text-xs text-muted-foreground">This prompt is used when AI Chat mode is active. Set boundaries for age-appropriate conversations.</p>
+                          <p className="text-xs text-muted-foreground">{t('admin.ai_prompt_chat_hint')}</p>
                         </TabsContent>
                         <TabsContent value="off" className="space-y-2 m-0">
-                          <Label className="text-xs">System Prompt (Off Mode Message)</Label>
+                          <Label className="text-xs">{t('admin.ai_prompt_off')}</Label>
                           <Textarea
                             className="min-h-[100px] text-xs font-mono"
                             value={formData.offSystemPrompt}
@@ -1105,7 +1108,7 @@ export default function AdminDashboard() {
                     </Tabs>
 
                     <Button className="w-full" onClick={handleSaveConfig} disabled={updateConfig.isPending}>
-                      {updateConfig.isPending ? "Saving..." : "Save Configuration"}
+                      {updateConfig.isPending ? t('admin.ai_saving') : t('admin.ai_save')}
                     </Button>
                   </div>
                 )}
@@ -1121,9 +1124,9 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-2">
                     <Library className="w-5 h-5 text-primary" />
                     <div>
-                      <CardTitle className="text-base">PyLearn Library Reference</CardTitle>
+                      <CardTitle className="text-base">{t('admin.lib_title')}</CardTitle>
                       <CardDescription className="text-xs mt-0.5">
-                        Auto-injected into every AI prompt · edit <code>pylearn-ref.ts</code> to update
+                        {t('admin.lib_desc')}
                       </CardDescription>
                     </div>
                   </div>

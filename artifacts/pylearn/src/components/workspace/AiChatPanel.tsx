@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Send, Bot, User, Sparkles, Plus } from 'lucide-react';
 import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from '@/lib/i18n';
 
 interface AiChatPanelProps {
   credits: number;
@@ -14,6 +15,7 @@ interface AiChatPanelProps {
 }
 
 export function AiChatPanel({ credits, onCreditUsed, initialPrompt, onPromptConsumed }: AiChatPanelProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const { messages, sendMessage, isStreaming, clearMessages } = useChatStream();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -38,7 +40,7 @@ export function AiChatPanel({ credits, onCreditUsed, initialPrompt, onPromptCons
     if (!input.trim() || isStreaming) return;
 
     if (credits <= 0) {
-      setErrorMsg('No credits remaining. Contact your teacher for more credits.');
+      setErrorMsg(t('ai_chat.error_no_credits'));
       return;
     }
 
@@ -65,18 +67,18 @@ export function AiChatPanel({ credits, onCreditUsed, initialPrompt, onPromptCons
             <Sparkles className="w-6 h-6 text-accent" />
           </div>
           <div>
-            <h2 className="font-display font-bold text-lg text-foreground">AI Chat</h2>
+            <h2 className="font-display font-bold text-lg text-foreground">{t('ai_chat.title')}</h2>
             <p className="text-xs text-muted-foreground">
               {noCredits ? (
-                <span className="text-destructive font-medium">No credits remaining</span>
+                <span className="text-destructive font-medium">{t('ai_chat.no_credits')}</span>
               ) : (
-                <>{credits} credit{credits !== 1 ? 's' : ''} remaining</>
+                <>{t(credits !== 1 ? 'ai_chat.credits_other' : 'ai_chat.credits_one', { count: credits })}</>
               )}
             </p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={handleNewChat} className="rounded-xl">
-          <Plus className="w-4 h-4 mr-2" /> New Chat
+          <Plus className="w-4 h-4 mr-2" /> {t('ai_chat.new_chat')}
         </Button>
       </div>
 
@@ -86,13 +88,13 @@ export function AiChatPanel({ credits, onCreditUsed, initialPrompt, onPromptCons
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-4 text-muted-foreground">
               <Bot className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-lg font-medium">Hello! Ask me anything about AI.</p>
+              <p className="text-lg font-medium">{t('ai_chat.welcome')}</p>
               <p className="text-sm mt-2 max-w-md">
-                I'm here to help you learn about artificial intelligence. Ask me questions, explore ideas, and discover how AI works!
+                {t('ai_chat.welcome_hint')}
               </p>
               {noCredits && (
                 <div className="mt-6 p-4 rounded-xl bg-destructive/10 text-destructive text-sm font-medium">
-                  No credits remaining. Contact your teacher for more credits.
+                  {t('ai_chat.no_credits_box')}
                 </div>
               )}
             </div>
@@ -149,7 +151,7 @@ export function AiChatPanel({ credits, onCreditUsed, initialPrompt, onPromptCons
           <Input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={noCredits ? "No credits remaining — contact your teacher" : "Ask a question..."}
+            placeholder={noCredits ? t('ai_chat.placeholder_no_credits') : t('ai_chat.placeholder')}
             className="pr-14 rounded-xl border-2 focus-visible:ring-primary/20 text-base py-6"
             disabled={isStreaming || noCredits}
           />
