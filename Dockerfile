@@ -10,7 +10,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable pnpm
+RUN npm install -g pnpm@10.33.2
 
 WORKDIR /app
 
