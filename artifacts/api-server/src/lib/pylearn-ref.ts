@@ -186,4 +186,64 @@ msg = {"mime": "text/html", "data": "<h1>Hi</h1>"}
 sys.stdout.write("\\x00PYLEARN_DISPLAY\\x00" + json.dumps(msg) + "\\x00")
 sys.stdout.flush()
 \`\`\`
+
+---
+
+## Multi-file Programs
+
+A workspace can contain several \`.py\` files. When you press **Run**, all files are written to the same temp directory, so you can split code into modules and import normally.
+
+**Rule:** the file **active in the editor** when Run is pressed is the entry point.
+
+### Example — two-file adventure
+
+\`\`\`python
+# forest.py  — helper module
+def enter(name: str, score: int = 0):
+    """Return (story_text: str, new_score: int)."""
+    return f"{name} steps into the forest.", score + 10
+
+def fight(health: int, damage: int = 5) -> int:
+    """Reduce health by damage, minimum 0."""
+    return max(0, health - damage)
+
+def is_alive(health: int) -> bool:
+    return health > 0
+\`\`\`
+
+\`\`\`python
+# main.py  — entry point (active when Run is pressed)
+import forest                               # works because forest.py is in the same workspace
+
+name = input("Your name? ")                 # str
+text, score = forest.enter(name, score=0)   # returns (str, int)
+print(text)
+
+health: int = 30
+health = forest.fight(health, damage=12)    # int, int  → int
+alive: bool = forest.is_alive(health)       # int       → bool
+
+print(f"Score: {score}   Health: {health}   Alive: {alive}")
+\`\`\`
+
+### Parameter types
+
+| Type | Example value | Parameter syntax |
+|------|--------------|-----------------|
+| \`str\`   | \`"Alice"\`       | \`name: str\` |
+| \`int\`   | \`42\`            | \`score: int = 0\` |
+| \`float\` | \`3.14\`          | \`speed: float = 1.0\` |
+| \`bool\`  | \`True\` / \`False\` | \`alive: bool = True\` |
+| \`list\`  | \`[1, 2, 3]\`     | \`items: list = []\` |
+
+### Tips
+
+- Import by filename without \`.py\`: file \`forest.py\` → \`import forest\`
+- Guard entry-point code so it doesn't run on import:
+  \`\`\`python
+  if __name__ == "__main__":
+      main()
+  \`\`\`
+- Return multiple values with a tuple: \`return score, health\` → unpack as \`score, health = func()\`
+- \`.prompt\` files are ignored — they are AI prompt templates, never executed
 `.trim();
