@@ -146,7 +146,8 @@ function copyUserUploads(userId: string, tmpDir: string) {
 
 export function startPtySession(
   userId: string,
-  code: string,
+  files: { filename: string; content: string }[],
+  activeFilename: string,
   onOutput: (data: string) => void,
   onExit: (code: number) => void,
   onDisplayEvent?: (event: DisplayMessage) => void
@@ -158,8 +159,10 @@ export function startPtySession(
 
   copyUserUploads(userId, tmpDir);
 
-  const tmpFile = path.join(tmpDir, "script.py");
-  fs.writeFileSync(tmpFile, code, "utf8");
+  for (const f of files) {
+    fs.writeFileSync(path.join(tmpDir, f.filename), f.content, "utf8");
+  }
+  const tmpFile = path.join(tmpDir, activeFilename);
 
   const modulesDir = path.join(__dirname, "..", "python-modules");
   const existingPythonPath = process.env.PYTHONPATH || "";

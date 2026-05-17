@@ -209,12 +209,16 @@ function handleMessage(client: WsClient, msg: WsMessage, ws: WebSocket) {
     }
 
     case "run-code": {
-      if (!msg.code) return;
       const userId = client.userId;
+      const files = (msg as unknown as { files?: { filename: string; content: string }[] }).files
+        ?? [{ filename: "script.py", content: msg.code ?? "" }];
+      const activeFilename = (msg as unknown as { activeFilename?: string }).activeFilename ?? "script.py";
+if (!files.length) return;
 
       startPtySession(
         userId,
-        msg.code,
+        files,
+        activeFilename,
         (data) => {
           broadcastToUser(userId, { type: "pty-output", data });
           broadcastToAdmins({ type: "pty-output", userId, data }, userId);

@@ -272,14 +272,20 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
   };
 
   const handleRun = () => {
-    const activeFile = files?.find(f => f.id === activeFileId);
-    const content = activeFileId ? (unsavedChanges[activeFileId] ?? activeFile?.content ?? '') : '';
-    if (!content) return;
+    if (!activeFileId || !files) return;
+    const activeFile = files.find(f => f.id === activeFileId);
+    if (!activeFile) return;
+    const allFiles = files
+      .filter(f => !f.filename.endsWith('.prompt'))
+      .map(f => ({
+        filename: f.filename,
+        content: unsavedChanges[f.id] ?? f.content,
+      }));
     terminalRef.current?.clear();
     setConsoleHasOutput(false);
     setShowConsole(false); // Console starts hidden; show it explicitly when needed
     resetDisplay();        // Clears display content → switches to console-only mode
-    runCode(content);
+    runCode(allFiles, activeFile.filename);
   };
 
   const handleHelp = () => {

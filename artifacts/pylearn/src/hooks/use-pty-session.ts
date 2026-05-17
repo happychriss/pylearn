@@ -26,9 +26,9 @@ export function usePtySession() {
     return () => { off1(); off2(); };
   }, [on]);
 
-  const runCode = useCallback((code: string) => {
+  const runCode = useCallback((files: { filename: string; content: string }[], activeFilename: string) => {
     setIsRunning(true);
-    emit('run-code', { code });
+    emit('run-code', { files, activeFilename });
   }, [emit]);
 
   const sendInput = useCallback((data: string) => {
