@@ -278,7 +278,10 @@ class Turtle:
 # API but route through the unified display system.
 
 def scene(name):
-    """Set the adventure background scene."""
+    """Set the adventure background scene.
+    Clears all sprites and story messages so each scene starts fresh.
+    Text labels (show_text) are preserved — they act as persistent HUD overlays.
+    """
     _emit("application/vnd.pylearn.scene+json", {"type": "scene", "name": str(name)})
     print("--- Scene:", str(name), "---")
 
@@ -292,6 +295,11 @@ def show_sprite(sprite, x=0, y=0, size=None):
     if size is not None:
         payload["size"] = int(size)
     _emit("application/vnd.pylearn.scene+json", payload)
+
+
+def hide_sprite(sprite):
+    """Remove a sprite from the scene."""
+    _emit("application/vnd.pylearn.scene+json", {"type": "hide", "sprite": str(sprite)})
 
 
 def move_sprite(sprite, x=0, y=0, duration=0):

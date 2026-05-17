@@ -85,6 +85,7 @@ export function useDisplayEvents(filterUserId?: string) {
             setAdventureState((prev) => ({
               ...prev,
               background: data.name as string,
+              sprites: {},   // clear sprites — each scene starts with a fresh cast
               messages: [],
               question: null,
               // texts intentionally preserved — HUD labels (score, etc.) survive scene transitions
@@ -122,6 +123,14 @@ export function useDisplayEvents(filterUserId?: string) {
               };
             });
             break;
+          case 'hide': {
+            setAdventureState((prev) => {
+              const next = { ...prev.sprites };
+              delete next[data.sprite as string];
+              return { ...prev, sprites: next };
+            });
+            break;
+          }
           case 'say':
             setAdventureState((prev) => ({
               ...prev,

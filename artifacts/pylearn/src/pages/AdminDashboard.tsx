@@ -201,7 +201,9 @@ export default function AdminDashboard() {
   const [newProgramFilename, setNewProgramFilename] = useState('');
   const [newProgramContent, setNewProgramContent] = useState('');
   const [savingProgram, setSavingProgram] = useState(false);
-  const [seedingDemos, setSeedingDemos] = useState(false);
+  const [editingProgram, setEditingProgram] = useState<ProgramTemplate | null>(null);
+  const [editProgramContent, setEditProgramContent] = useState('');
+  const [assigningAll, setAssigningAll] = useState<number | null>(null);
   const [libraryRef, setLibraryRef] = useState<string | null>(null);
   const [libraryRefOpen, setLibraryRefOpen] = useState(false);
 
@@ -317,26 +319,45 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSeedDemos = async () => {
-    setSeedingDemos(true);
+  const handleUpdateProgram = async () => {
+    if (!editingProgram) return;
+    setSavingProgram(true);
     try {
-      const res = await fetch('/api/admin/programs/seed-demos', {
-        method: 'POST',
+      const res = await fetch(`/api/admin/programs/${editingProgram.id}`, {
+        method: 'PUT',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editProgramContent }),
       });
       if (res.ok) {
-        const data = await res.json();
-        await fetchPrograms();
-        if (data.created.length > 0) {
-          toast({ title: 'Demos loaded', description: `Added ${data.created.length} demo program${data.created.length === 1 ? '' : 's'}` });
-        } else {
-          toast({ title: 'Already loaded', description: 'All demo programs are already in your library' });
-        }
+        const updated = await res.json();
+        setPrograms(prev => prev.map(p => p.id === updated.id ? updated : p));
+        toast({ title: 'Saved', description: `${editingProgram.filename} updated` });
+        setEditingProgram(null);
       } else {
-        toast({ title: 'Error', description: 'Failed to load demo programs', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Could not save program', variant: 'destructive' });
       }
     } finally {
-      setSeedingDemos(false);
+      setSavingProgram(false);
+    }
+  };
+
+  const handleAssignAll = async (programId: number) => {
+    if (!studentAccounts || studentAccounts.length === 0) return;
+    setAssigningAll(programId);
+    try {
+      await Promise.all(studentAccounts.map(account =>
+        fetch(`/api/admin/programs/${programId}/assign`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId: account.id }),
+        })
+      ));
+      setAssigningProgram(null);
+      toast({ title: 'Assigned!', description: `Program sent to all ${studentAccounts.length} students` });
+    } finally {
+      setAssigningAll(null);
     }
   };
 
@@ -784,20 +805,39 @@ export default function AdminDashboard() {
               </DialogContent>
             </Dialog>
 
+            {/* Edit program dialog */}
+            <Dialog open={!!editingProgram} onOpenChange={(open) => { if (!open) setEditingProgram(null); }}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Edit: {editingProgram?.filename}</DialogTitle>
+                  <DialogDescription>Fix bugs or update the program content. Students who already received this file are not affected.</DialogDescription>
+                </DialogHeader>
+                <div className="py-2">
+                  <Textarea
+                    value={editProgramContent}
+                    onChange={e => setEditProgramContent(e.target.value)}
+                    placeholder="# Python code..."
+                    className="font-mono text-sm min-h-[320px] resize-y"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditingProgram(null)} disabled={savingProgram}>{t('common.cancel')}</Button>
+                  <Button onClick={handleUpdateProgram} disabled={savingProgram}>
+                    {savingProgram ? t('admin.programs_saving') : 'Save changes'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <Card className="shadow-md">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2"><FileCode className="w-5 h-5"/> {t('admin.programs_title')}</CardTitle>
                   <CardDescription>{t('admin.programs_desc')}</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={handleSeedDemos} disabled={seedingDemos}>
-                    <BookOpen className="w-4 h-4 mr-2" /> {seedingDemos ? t('admin.programs_loading') : t('admin.programs_load_demos')}
-                  </Button>
-                  <Button onClick={() => setNewProgramOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> {t('admin.programs_new')}
-                  </Button>
-                </div>
+                <Button onClick={() => setNewProgramOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" /> {t('admin.programs_new')}
+                </Button>
               </CardHeader>
               <CardContent>
                 {programsLoading ? (
@@ -837,24 +877,43 @@ export default function AdminDashboard() {
                             {assigningProgram === program.id && (
                               <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-xl shadow-lg min-w-[180px] overflow-hidden">
                                 {studentAccounts && studentAccounts.length > 0 ? (
-                                  studentAccounts.map(account => (
+                                  <>
                                     <button
-                                      key={account.id}
-                                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
-                                      onClick={() => handleAssignProgram(program.id, account.id, account.displayName)}
+                                      className="w-full text-left px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors flex items-center gap-2 border-b border-border"
+                                      disabled={assigningAll === program.id}
+                                      onClick={() => handleAssignAll(program.id)}
                                     >
-                                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
-                                        {account.displayName[0]?.toUpperCase()}
-                                      </span>
-                                      {account.displayName}
+                                      <Users className="w-4 h-4" />
+                                      {assigningAll === program.id ? 'Assigning…' : `All students (${studentAccounts.length})`}
                                     </button>
-                                  ))
+                                    {studentAccounts.map(account => (
+                                      <button
+                                        key={account.id}
+                                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
+                                        onClick={() => handleAssignProgram(program.id, account.id, account.displayName)}
+                                      >
+                                        <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
+                                          {account.displayName[0]?.toUpperCase()}
+                                        </span>
+                                        {account.displayName}
+                                      </button>
+                                    ))}
+                                  </>
                                 ) : (
                                   <div className="px-4 py-3 text-xs text-muted-foreground">{t('admin.programs_no_students')}</div>
                                 )}
                               </div>
                             )}
                           </div>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => { setEditingProgram(program); setEditProgramContent(program.content); }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
 
                           {deleteProgramConfirm === program.id ? (
                             <div className="flex items-center gap-2">

@@ -122,7 +122,7 @@ IMPORTANT — only use the methods listed above. Do NOT use: speed(), stamp(), p
 NOTE: Adventure Scenes and Turtle cannot be used in the same program — they use separate renderers.
 
 \`\`\`python
-from pylearn import scene, say, ask, show_sprite, move_sprite, show_text, clear_text
+from pylearn import scene, say, ask, show_sprite, move_sprite, hide_sprite, show_text, clear_text
 
 scene("forest")            # set background — built-in names: forest, cave, village, dungeon
                            # custom: upload an image file (without extension) in the Images panel
@@ -132,6 +132,10 @@ show_sprite("hero", x=50, y=80)            # place a sprite
 show_sprite("hero", x=50, y=80, size=120)  # override sprite width (aspect ratio preserved)
 move_sprite("hero", x=200, y=80)           # instant move
 move_sprite("hero", x=200, y=80, duration=0.5)  # animated move over 0.5 seconds
+hide_sprite("hero")                        # remove a sprite from the scene
+
+# NOTE: scene() automatically clears all sprites — each scene starts with a fresh cast.
+# Text labels (show_text) are NOT cleared by scene() — they act as persistent HUD overlays.
 
 # Text labels (HUD / score / overlay) — same 0–500 coordinate space
 show_text("score", "Score: 10", x=10, y=10)             # place or update a label (x,y optional: kept from prev call)
