@@ -150,8 +150,17 @@ function findMatch(content: string, oldText: string): { index: number; length: n
   return { index: realStart, length: realEnd - realStart };
 }
 
+/** Returns true when old and new differ only in leading/trailing whitespace per line
+ *  (i.e. an indentation-only fix — no actual code was changed). */
+function isIndentOnly(oldText: string, newText: string): boolean {
+  const ol = oldText.split('\n');
+  const nl = newText.split('\n');
+  return ol.length === nl.length && ol.every((l, i) => l.trim() === nl[i].trim());
+}
+
 /** Apply a list of old_text → new_text changes to fileContent.
- *  Each old_text must match exactly once. Returns the patched content or an error. */
+ *  Each old_text must match exactly once — unless it is an indentation-only fix that
+ *  appears multiple times, in which case all occurrences are patched at once. */
 function applyChanges(
   fileContent: string,
   changes: RawChange[],
@@ -164,6 +173,13 @@ function applyChanges(
 
     const match = findMatch(content, oldText);
     if (!match) {
+      // Fallback: indentation-only fix that appears multiple times → patch all occurrences.
+      // The AI correctly identifies the bad-indented line but can't provide a unique anchor
+      // when the same line repeats (e.g. " t.penup()" appears 5× in one function block).
+      if (isIndentOnly(oldText, newText) && content.includes(oldText)) {
+        content = content.split(oldText).join(newText);
+        continue;
+      }
       const preview = oldText.split('\n')[0].trim().slice(0, 60);
       return { ok: false, error: `Could not find: "${preview}"` };
     }
