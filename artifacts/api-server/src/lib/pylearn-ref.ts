@@ -58,13 +58,31 @@ NOTE: Turtle and Adventure Scenes cannot be used in the same program — they us
 \`\`\`python
 t = pylearn.Turtle(width=600, height=400)  # canvas size (default 600×400)
 
+# COORDINATE SYSTEM — critical, differs from standard Python turtle:
+#   Origin (0, 0) is the TOP-LEFT corner.
+#   x increases to the RIGHT, y increases DOWNWARD.
+#   Canvas range: x: 0–width (0–600), y: 0–height (0–400).
+#   Turtle starts at the CENTER: (300, 200) for the default 600×400 canvas.
+#   NEVER use negative coordinates — they land off-screen.
+#   Safe drawing area: x 20–580, y 20–380.
+#
+# Example — smiley face centred on a 600×400 canvas:
+#   t.bgcolor("#00ff00")
+#   t.penup(); t.goto(300, 250); t.pendown()   # bottom of face circle
+#   t.fillcolor("#ff69b4"); t.begin_fill(); t.circle(80); t.end_fill()
+#   t.penup(); t.goto(265, 195); t.pendown()
+#   t.dot(16, "#000000")                        # left eye
+#   t.penup(); t.goto(335, 195); t.pendown()
+#   t.dot(16, "#000000")                        # right eye
+#   t.done()
+
 # Movement
 t.forward(distance)       # move forward (pixels) — alias: t.fd(distance)
 t.backward(distance)      # move backward        — alias: t.bk(distance)
 t.right(angle)            # turn right (degrees)  — alias: t.rt(angle)
 t.left(angle)             # turn left (degrees)   — alias: t.lt(angle)
 t.setheading(angle)       # set absolute heading (0=right, 90=down, 180=left, 270=up) — alias: t.seth(angle)
-t.goto(x, y)              # jump to absolute position
+t.goto(x, y)              # jump to absolute pixel position (top-left origin, y-down)
 
 # Pen control
 t.penup()                 # lift pen — move without drawing  — alias: t.pu()

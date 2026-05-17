@@ -36,7 +36,7 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
   const [input, setInput] = useState('');
   const { messages, sendMessage, isStreaming, removeSuggestion } = useChatStream();
   const noCredits = credits <= 0;
-  const { activeFileId, openFiles, unsavedChanges, updateUnsavedContent } = useWorkspaceStore();
+  const { activeFileId, openFiles, unsavedChanges, updateUnsavedContent, updateOpenFileContent, clearUnsavedContent } = useWorkspaceStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const acceptSuggestion = useAcceptSuggestion();
   const rejectSuggestion = useRejectSuggestion();
@@ -70,7 +70,9 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
       } },
       {
         onSuccess: (updatedFile) => {
-          updateUnsavedContent(activeFileId, updatedFile.content);
+          // File is already saved in DB by the accept API call — sync local state
+          updateOpenFileContent(activeFileId, updatedFile.content);
+          clearUnsavedContent(activeFileId);
           removeSuggestion(messageId);
         },
       }
@@ -104,8 +106,16 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              {messages.map((msg) => (
-                <motion.div 
+              {messages.map((msg, idx) => {
+                // While streaming, mask everything from ---SUGGESTION--- onward in the last
+                // assistant message so kids don't see raw JSON being typed out.
+                const isStreamingThis = isStreaming && idx === messages.length - 1 && msg.role === 'assistant';
+                const markerIdx = isStreamingThis ? msg.content.indexOf('---SUGGESTION---') : -1;
+                const visibleContent = markerIdx !== -1 ? msg.content.slice(0, markerIdx).trim() : msg.content;
+                const isThinking = isStreamingThis && markerIdx !== -1;
+
+                return (
+                <motion.div
                   key={msg.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -117,15 +127,15 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
                     {msg.role === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col">
-                    {msg.content && (
+                    {(visibleContent || isThinking) && (
                       <div className={`p-3 rounded-2xl text-sm ${
                         msg.role === 'user'
                           ? 'bg-primary text-primary-foreground rounded-tr-sm'
                           : 'bg-muted text-foreground rounded-tl-sm'
                       }`}>
                         {msg.role === 'user' ? (
-                          <div className="whitespace-pre-wrap">{msg.content}</div>
-                        ) : (
+                          <div className="whitespace-pre-wrap">{visibleContent}</div>
+                        ) : visibleContent ? (
                           <ReactMarkdown
                             components={{
                               code: ({ children, className }) => {
@@ -140,8 +150,15 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
                               ol: ({ children }) => <ol className="list-decimal list-inside mb-1 space-y-0.5">{children}</ol>,
                             }}
                           >
-                            {msg.content}
+                            {visibleContent}
                           </ReactMarkdown>
+                        ) : null}
+                        {isThinking && (
+                          <div className={`flex gap-1 items-center ${visibleContent ? 'mt-2' : ''}`}>
+                            <span className="w-2 h-2 rounded-full bg-foreground/30 animate-bounce" />
+                            <span className="w-2 h-2 rounded-full bg-foreground/30 animate-bounce [animation-delay:0.2s]" />
+                            <span className="w-2 h-2 rounded-full bg-foreground/30 animate-bounce [animation-delay:0.4s]" />
+                          </div>
                         )}
                       </div>
                     )}
@@ -157,7 +174,8 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
                     )}
                   </div>
                 </motion.div>
-              ))}
+              );
+              })}
               {isStreaming && (
                 <motion.div className="flex gap-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                   <div className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center">

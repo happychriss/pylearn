@@ -46,6 +46,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     activeFileId,
     unsavedChanges,
     clearUnsavedContent,
+    updateOpenFileContent,
     isAiChatOpen,
     toggleAiChat,
     updateUnsavedContent,
@@ -251,6 +252,9 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     setSaveStatus('saving');
     updateFile.mutate({ id: fileId, data: { content } }, {
       onSuccess: () => {
+        // Update openFiles cache BEFORE clearing unsaved changes so EditorPanel
+        // doesn't fall back to the stale TanStack Query cache content on re-render.
+        updateOpenFileContent(fileId, content);
         clearUnsavedContent(fileId);
         setSaveStatus('saved');
         if (saveIndicatorTimerRef.current) clearTimeout(saveIndicatorTimerRef.current);
@@ -470,15 +474,17 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
             </Button>
           ))}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleHelp}
-            disabled={helpReq.isPending}
-            className="rounded-xl border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-          >
-            <Hand className="w-4 h-4 mr-2" /> {t('workspace.need_help')}
-          </Button>
+          {!isTeacherDemo && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleHelp}
+              disabled={helpReq.isPending}
+              className="rounded-xl border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+            >
+              <Hand className="w-4 h-4 mr-2" /> {t('workspace.need_help')}
+            </Button>
+          )}
 
           {!isChatMode && isAiEnabled && (
             <Button
@@ -493,15 +499,17 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
 
           <div className="w-px h-6 bg-border mx-1" />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            className="rounded-xl text-muted-foreground hover:text-destructive"
-            title="Log out"
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
+          {!isTeacherDemo && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="rounded-xl text-muted-foreground hover:text-destructive"
+              title="Log out"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </header>
 

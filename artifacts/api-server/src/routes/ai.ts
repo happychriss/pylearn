@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { jsonrepair } from "jsonrepair";
 import { eq } from "drizzle-orm";
 import { db, filesTable, aiConfigTable, usersTable, studentAccountsTable } from "@workspace/db";
 import { AiChatBody, AcceptSuggestionBody, AcceptSuggestionResponse } from "@workspace/api-zod";
@@ -173,9 +174,11 @@ function applyChanges(
   return { ok: true, result: content };
 }
 
-/** Strip // line comments from JSON text (outside of string values). */
-function sanitizeJson(str: string): string {
-  return str.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*/g, (m, s) => s ?? '');
+/** Repair common AI-generated JSON problems using the jsonrepair library.
+ *  Handles trailing commas, single quotes, missing brackets, JS string concatenation,
+ *  // comments, backtick fences, and many other LLM output quirks. */
+function repairJson(str: string): string {
+  return jsonrepair(str);
 }
 
 /** Parse the AI response and resolve it to a final SuggestionPayload (with computed newContent),
@@ -186,7 +189,7 @@ function extractSuggestion(
   filename: string,
 ): { text: string; suggestion: SuggestionPayload | null; error?: string } {
   const tryResolve = (jsonStr: string, cleanText: string) => {
-    const raw = JSON.parse(sanitizeJson(jsonStr)) as RawSuggestionPayload;
+    const raw = JSON.parse(repairJson(jsonStr)) as RawSuggestionPayload;
     if (!raw.explanation) return null;
 
     // Preferred: changes array
@@ -225,7 +228,9 @@ function extractSuggestion(
   const endIdx = fullText.indexOf(endMarker);
 
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    const jsonStr = fullText.slice(startIdx + marker.length, endIdx).trim();
+    // Strip backtick fences the AI sometimes wraps around the JSON despite instructions
+    let jsonStr = fullText.slice(startIdx + marker.length, endIdx).trim();
+    jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
     const cleanText = fullText.slice(0, startIdx).trim();
     try {
       const resolved = tryResolve(jsonStr, cleanText);
@@ -420,13 +425,6 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     { role: "system", content: systemPrompt },
   ];
 
-  if (parsed.data.fileContext) {
-    messages.push({
-      role: "system",
-      content: `Current file (${parsed.data.filename || "untitled.py"}):\n\`\`\`python\n${parsed.data.fileContext}\n\`\`\``,
-    });
-  }
-
   if (parsed.data.conversationHistory) {
     for (const msg of parsed.data.conversationHistory) {
       // Strip any leaked suggestion markers from history so they don't confuse the AI
@@ -439,6 +437,16 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
         content,
       });
     }
+  }
+
+  // Inject the current file AFTER history so the AI always sees the freshest state last.
+  // Placing it before history caused the AI to use old mental models from previous turns
+  // when generating old_text, leading to "Could not find" errors on multi-turn edits.
+  if (parsed.data.fileContext) {
+    messages.push({
+      role: "system",
+      content: `Current file (${parsed.data.filename || "untitled.py"}):\n\`\`\`python\n${parsed.data.fileContext}\n\`\`\``,
+    });
   }
 
   messages.push({ role: "user", content: parsed.data.message });

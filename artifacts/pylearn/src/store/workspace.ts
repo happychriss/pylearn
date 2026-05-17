@@ -31,6 +31,7 @@ interface WorkspaceState {
   setOpenFiles: (files: ProjectFile[]) => void;
   updateUnsavedContent: (id: number, content: string) => void;
   clearUnsavedContent: (id: number) => void;
+  updateOpenFileContent: (id: number, content: string) => void;
   toggleAiChat: () => void;
 }
 
@@ -55,5 +56,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       saveUnsaved(next);
       return { unsavedChanges: next };
     }),
+  updateOpenFileContent: (id, content) =>
+    set((state) => ({
+      openFiles: state.openFiles.map(f => f.id === id ? { ...f, content } : f),
+    })),
   toggleAiChat: () => set((state) => ({ isAiChatOpen: !state.isAiChatOpen })),
 }));
