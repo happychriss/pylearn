@@ -13,7 +13,8 @@ import { OutputPanel } from '@/components/workspace/OutputPanel';
 import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile, useGetStudentAiConfig, useListActiveCheatSheets } from '@workspace/api-client-react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff, Info, ArrowLeft } from 'lucide-react';
+import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff, Info, ArrowLeft, Undo2, Redo2 } from 'lucide-react';
+import type { editor as MonacoEditor } from 'monaco-editor';
 import { usePtySession } from '@/hooks/use-pty-session';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useDisplayEvents } from '@/hooks/use-display-events';
@@ -82,6 +83,13 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
   const { emit, on, onConnect, status: wsStatus } = useWebSocket('/api/ws');
   const terminalRef = useRef<XTerm | null>(null);
   const outputPresentRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // fileId + content stashed in refs so the autosave closure always reads the latest values
+  const autosaveFileId = useRef<number | null>(null);
+  const autosaveContent = useRef<string>('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   // Track browser fullscreen state (ESC key or other exit paths)
   useEffect(() => {
@@ -147,6 +155,14 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     });
     return () => { off1(); off2(); off3(); off4(); off5(); off6(); off7(); };
   }, [on, user?.id, updateUnsavedContent, refetchSheets]);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (saveIndicatorTimerRef.current) clearTimeout(saveIndicatorTimerRef.current);
+    };
+  }, []);
 
   if (isLoading) {
     return <div className="h-dvh w-full flex items-center justify-center bg-background text-muted-foreground">{t('workspace.loading')}</div>;
@@ -231,17 +247,24 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     window.addEventListener('mouseup', onUp);
   };
 
+  const triggerSave = (fileId: number, content: string, showToast = false) => {
+    setSaveStatus('saving');
+    updateFile.mutate({ id: fileId, data: { content } }, {
+      onSuccess: () => {
+        clearUnsavedContent(fileId);
+        setSaveStatus('saved');
+        if (saveIndicatorTimerRef.current) clearTimeout(saveIndicatorTimerRef.current);
+        saveIndicatorTimerRef.current = setTimeout(() => setSaveStatus('idle'), 1500);
+        if (showToast) toast({ title: "Saved!", description: "File saved." });
+      },
+      onError: () => setSaveStatus('idle'),
+    });
+  };
+
   const handleSave = () => {
     if (!activeFileId || !unsavedChanges[activeFileId]) return;
-    updateFile.mutate({
-      id: activeFileId,
-      data: { content: unsavedChanges[activeFileId] }
-    }, {
-      onSuccess: () => {
-        clearUnsavedContent(activeFileId);
-        toast({ title: "Saved!", description: "File saved successfully." });
-      }
-    });
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    triggerSave(activeFileId, unsavedChanges[activeFileId]);
   };
 
   const handleRun = () => {
@@ -269,11 +292,26 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
       updateUnsavedContent(activeFileId, content);
       const filename = files?.find(f => f.id === activeFileId)?.filename;
       emit('file-changed', { room: user?.id, content, filename, fileId: activeFileId });
+
+      // Autosave: stash latest values in refs so the timeout closure is never stale
+      autosaveFileId.current = activeFileId;
+      autosaveContent.current = content;
+      setSaveStatus('idle');
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = setTimeout(() => {
+        if (autosaveFileId.current !== null) {
+          triggerSave(autosaveFileId.current, autosaveContent.current);
+        }
+      }, 2000);
     }
   };
 
   const handlePresent = () => {
     outputPresentRef.current?.requestFullscreen();
+  };
+
+  const handleEditorMount = (editor: MonacoEditor.IStandaloneCodeEditor) => {
+    editorRef.current = editor;
   };
 
   const activeFile = files?.find(f => f.id === activeFileId);
@@ -516,13 +554,29 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
                             <span className="text-sm font-medium">{t('workspace.source_code')}</span>
                             {activeFile && (
                               <span className="text-primary-foreground/60 text-xs truncate">
-                                {activeFile.filename}{isDirty && ' •'}
+                                {activeFile.filename}
+                                {saveStatus === 'saved' && <span className="ml-1 text-green-300">✓</span>}
+                                {saveStatus === 'saving' && <span className="ml-1 opacity-60">↑</span>}
+                                {saveStatus === 'idle' && isDirty && <span className="ml-1">•</span>}
                               </span>
                             )}
                           </div>
                           <div className="flex items-center gap-1 shrink-0 ml-2">
                             {!isChatMode && (
                               <>
+                                <Button variant="ghost" size="sm"
+                                  onClick={() => editorRef.current?.trigger('keyboard', 'undo', null)}
+                                  className={PANEL_HEADER_BTN}
+                                  title="Undo (Ctrl+Z)">
+                                  <Undo2 className="w-3 h-3" />
+                                </Button>
+                                <Button variant="ghost" size="sm"
+                                  onClick={() => editorRef.current?.trigger('keyboard', 'redo', null)}
+                                  className={PANEL_HEADER_BTN}
+                                  title="Redo (Ctrl+Y)">
+                                  <Redo2 className="w-3 h-3" />
+                                </Button>
+                                <div className="w-px h-4 bg-white/20 mx-0.5" />
                                 <Button variant="ghost" size="sm"
                                   onClick={handleSave}
                                   disabled={!isDirty || updateFile.isPending}
@@ -558,7 +612,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
                           </div>
                         </div>
                         <div className="flex-1 overflow-hidden">
-                          <EditorPanel onContentChange={handleEditorChange} />
+                          <EditorPanel onContentChange={handleEditorChange} onEditorMount={handleEditorMount} />
                         </div>
                       </div>
                     </Panel>
