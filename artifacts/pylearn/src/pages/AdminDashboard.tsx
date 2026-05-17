@@ -502,13 +502,14 @@ export default function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-8">
+          <TabsList className="grid w-full grid-cols-7 mb-8">
             <TabsTrigger value="overview">{t('admin.tab_overview')}</TabsTrigger>
             <TabsTrigger value="students">{t('admin.tab_students')}</TabsTrigger>
             <TabsTrigger value="programs">{t('admin.tab_programs')}</TabsTrigger>
             <TabsTrigger value="prompts">{t('admin.tab_prompts')}</TabsTrigger>
             <TabsTrigger value="cheatsheets">{t('admin.tab_cheatsheets')}</TabsTrigger>
             <TabsTrigger value="settings">{t('admin.tab_settings')}</TabsTrigger>
+            <TabsTrigger value="my-workspace">{t('admin.tab_my_workspace')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -1013,6 +1014,22 @@ export default function AdminDashboard() {
 
           <TabsContent value="cheatsheets">
             <CheatSheetsTab />
+          </TabsContent>
+
+          <TabsContent value="my-workspace">
+            <Card className="shadow-md max-w-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileCode className="w-5 h-5" /> {t('admin.demo_title')}
+                </CardTitle>
+                <CardDescription>{t('admin.demo_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => setLocation('/admin/demo-workspace')}>
+                  <FileCode className="w-4 h-4 mr-2" /> {t('admin.demo_launch_btn')}
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="settings">

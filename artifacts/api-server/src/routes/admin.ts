@@ -3,6 +3,12 @@ import { eq } from "drizzle-orm";
 import { PYLEARN_LIBRARY_REFERENCE } from "../lib/pylearn-ref";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { createSession, SESSION_TTL, STUDENT_SESSION_COOKIE, type SessionData } from "../lib/auth";
+
+const IS_LOCAL_AUTH = process.env.LOCAL_AUTH === "true";
+const IS_SECURE = process.env.NODE_ENV === "production" && !IS_LOCAL_AUTH;
+const TEACHER_DEMO_ID = "teacher-demo";
+const TEACHER_DEMO_NAME = "Teacher";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -375,6 +381,71 @@ router.post("/admin/cheatsheets/:id/toggle", async (req, res): Promise<void> => 
   const [sheet] = await db.update(cheatSheetsTable).set({ isActive: !current.isActive }).where(eq(cheatSheetsTable.id, id)).returning();
   broadcastToStudents({ type: "cheatsheet-updated" });
   res.json(sheet);
+});
+
+// ── Teacher Demo Workspace ─────────────────────────────────────────────────────
+
+router.post("/admin/demo-workspace/setup", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  // Ensure the teacher-demo user exists
+  let [user] = await db.select().from(usersTable).where(eq(usersTable.id, TEACHER_DEMO_ID));
+  if (!user) {
+    [user] = await db.insert(usersTable).values({
+      id: TEACHER_DEMO_ID,
+      firstName: TEACHER_DEMO_NAME,
+      role: "student",
+    }).returning();
+  }
+
+  // Ensure the teacher-demo student account exists
+  const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, TEACHER_DEMO_ID));
+  if (!account) {
+    const pin = generatePin();
+    const pinHash = await bcrypt.hash(pin, 10);
+    await db.insert(studentAccountsTable).values({
+      id: TEACHER_DEMO_ID,
+      displayName: TEACHER_DEMO_NAME,
+      pinHash,
+      pinPlain: pin,
+      isPaused: false,
+      aiCredits: 999,
+      createdByAdminId: req.user!.id,
+    });
+  }
+
+  // Seed a starter file if none exists
+  const existingFiles = await db.select().from(filesTable).where(eq(filesTable.userId, TEACHER_DEMO_ID));
+  if (existingFiles.length === 0) {
+    await db.insert(filesTable).values({
+      userId: TEACHER_DEMO_ID,
+      filename: "demo.py",
+      content: "# Teacher demo workspace\n# Edit and run code here to demo for your class\nprint('Hello, class!')\n",
+    });
+  }
+
+  // Issue a fresh student session for the teacher-demo account
+  const sessionData: SessionData = {
+    user: {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImageUrl: user.profileImageUrl,
+    },
+    access_token: "teacher-demo-session",
+  };
+
+  const sid = await createSession(sessionData);
+  res.cookie(STUDENT_SESSION_COOKIE, sid, {
+    httpOnly: true,
+    secure: IS_SECURE,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
+
+  res.json({ userId: TEACHER_DEMO_ID });
 });
 
 export default router;

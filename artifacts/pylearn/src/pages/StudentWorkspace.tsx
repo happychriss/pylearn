@@ -13,7 +13,7 @@ import { OutputPanel } from '@/components/workspace/OutputPanel';
 import { useListFiles, useUpdateFile, useCreateHelpRequest, useGetMyProfile, useGetStudentAiConfig, useListActiveCheatSheets } from '@workspace/api-client-react';
 import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff, Info } from 'lucide-react';
+import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand, MessageSquare, Code, Monitor, Terminal as TerminalIcon, LogOut, Wifi, WifiOff, Info, ArrowLeft } from 'lucide-react';
 import { usePtySession } from '@/hooks/use-pty-session';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useDisplayEvents } from '@/hooks/use-display-events';
@@ -28,7 +28,7 @@ type FullscreenPanel = 'code' | null;
 const PANEL_HEADER = 'flex items-center justify-between px-3 py-2 shrink-0 bg-gradient-to-r from-[hsl(185_65%_28%)] to-primary text-primary-foreground';
 const PANEL_HEADER_BTN = 'h-6 px-2 text-[11px] gap-1 text-primary-foreground/70 hover:text-primary-foreground hover:bg-white/15';
 
-export default function StudentWorkspace() {
+export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: boolean } = {}) {
   setSessionType('student');
   const { t } = useTranslation();
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -383,6 +383,11 @@ export default function StudentWorkspace() {
       {/* ── App header ── */}
       <header className="h-14 border-b border-primary/20 flex items-center justify-between px-4 shrink-0 shadow-sm relative z-10" style={{ background: 'linear-gradient(to right, hsl(185, 50%, 93%), white)' }}>
         <div className="flex items-center gap-4">
+          {isTeacherDemo && (
+            <Button variant="ghost" size="sm" onClick={() => setLocation('/admin')} className="rounded-xl text-muted-foreground shrink-0">
+              <ArrowLeft className="w-4 h-4 mr-1" /> Dashboard
+            </Button>
+          )}
           <div className="flex items-center gap-2">
             <div className="font-display font-bold text-lg text-primary tracking-tight">PyLearn</div>
             <span className="text-[10px] text-muted-foreground font-mono">{APP_VERSION}</span>
