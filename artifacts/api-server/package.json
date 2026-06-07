@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "fuser -k 8080/tcp 2>/dev/null; sleep 2; NODE_ENV=development tsx --env-file=../../.env.local ./src/index.ts",
     "build": "tsx ./build.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/lib/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

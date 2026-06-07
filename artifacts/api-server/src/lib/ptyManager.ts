@@ -3,6 +3,11 @@ import * as fs from "fs";
 import * as path from "path";
 import * as pty from "node-pty";
 import { getUserUploadDir } from "./adventureStorage";
+import { safeScriptFilename } from "./safety";
+import { parseDisplayChunk, type DisplayMessage } from "./display-protocol";
+
+// Re-exported so existing importers (websocket.ts) keep working unchanged.
+export type { DisplayMessage } from "./display-protocol";
 
 // __dirname works in both CJS (native) and ESM via tsx (shimmed).
 // esbuild CJS output provides __dirname natively.
@@ -10,34 +15,33 @@ import { getUserUploadDir } from "./adventureStorage";
 const IDLE_TIMEOUT_MS = 60_000;
 // Hard CPU-time limit (seconds) enforced via bash ulimit — kills tight infinite loops
 const CPU_LIMIT_SECS = 30;
+// Absolute wall-clock cap, independent of output. ulimit -t only counts CPU time,
+// so a low-CPU loop that keeps printing (e.g. sleep+print) would never trip it and
+// the idle timer keeps resetting on each line. This is the hard ceiling.
+const MAX_WALL_MS = 5 * 60_000;
+// Cap total forwarded output per run so a `while True: print(...)` can't flood the
+// student's (and monitoring teacher's) browser/socket.
+const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+// Safety ceiling on concurrent interpreters on the single shared machine. A normal
+// class is ~15; this only stops a runaway/abusive client from exhausting memory.
+const MAX_CONCURRENT_SESSIONS = 30;
 
-/**
- * Universal display protocol:
- * Python code emits rich output via null-byte delimited markers in stdout.
- * Format: \x00PYLEARN_DISPLAY\x00{"mime":"...","data":...}\x00
- * The PTY output handler intercepts these markers, strips them from the
- * terminal stream, parses the JSON, and forwards the display message via
- * WebSocket as a "display-event" message.
- */
-const DISPLAY_START = "\x00PYLEARN_DISPLAY\x00";
-const DISPLAY_END = "\x00";
-
-export interface DisplayMessage {
-  mime: string;
-  data: unknown;
-  id?: string;
-  append?: boolean;
-}
+// Display-protocol parsing lives in ./display-protocol (pure + unit-tested).
 
 interface PtySession {
   process: pty.IPty;
   tmpFile: string;
   tmpDir: string;
   idleTimer: ReturnType<typeof setTimeout>;
+  hardTimer: ReturnType<typeof setTimeout>;
   onOutput: (data: string) => void;
   onExit: (code: number) => void;
   onDisplayEvent?: (event: DisplayMessage) => void;
   displayBuffer: string;
+  bytesSent: number;
+  // Set when the run was explicitly stopped (user "Stop" or output/limit kill) so
+  // the async process onExit doesn't emit a second, duplicate pty-exit.
+  stopped: boolean;
 }
 
 const sessions = new Map<string, PtySession>();
@@ -47,6 +51,7 @@ function clearSession(userId: string) {
   if (!session) return;
 
   clearTimeout(session.idleTimer);
+  clearTimeout(session.hardTimer);
   try {
     session.process.kill();
   } catch (err) {
@@ -69,63 +74,15 @@ function resetIdleTimer(userId: string) {
 
 
 /**
- * Extract and emit any \x00PYLEARN_DISPLAY\x00{json}\x00 markers from raw data.
- * Returns the data with markers stripped out.
+ * Run one PTY chunk through the display-protocol parser, updating the session's
+ * carry-over buffer and dispatching any complete display events. Returns the
+ * terminal text with markers stripped.
  */
-function extractDisplayMarkers(session: PtySession, data: string): string {
-  // Prepend any partial display buffer from previous chunk
-  let input = session.displayBuffer + data;
-  session.displayBuffer = "";
-  let output = "";
-
-  while (true) {
-    const startIdx = input.indexOf(DISPLAY_START);
-    if (startIdx === -1) {
-      // No more markers — check if data ends with a partial DISPLAY_START
-      // e.g. input ends with "\x00PYL" which could be the start of a marker
-      for (let i = Math.max(0, input.length - DISPLAY_START.length); i < input.length; i++) {
-        const tail = input.slice(i);
-        if (DISPLAY_START.startsWith(tail) && tail.length < DISPLAY_START.length) {
-          session.displayBuffer = tail;
-          output += input.slice(0, i);
-          return output;
-        }
-      }
-      output += input;
-      return output;
-    }
-
-    // Add everything before the marker to output
-    output += input.slice(0, startIdx);
-
-    // Find the closing null byte after the start marker
-    const jsonStart = startIdx + DISPLAY_START.length;
-    const endIdx = input.indexOf(DISPLAY_END, jsonStart);
-
-    if (endIdx === -1) {
-      // Incomplete marker — buffer it for next chunk
-      session.displayBuffer = input.slice(startIdx);
-      return output;
-    }
-
-    // Extract and parse the JSON
-    const jsonStr = input.slice(jsonStart, endIdx);
-    try {
-      const msg = JSON.parse(jsonStr) as DisplayMessage;
-      if (msg.mime && msg.data !== undefined) {
-        session.onDisplayEvent?.(msg);
-      }
-    } catch (err) {
-      console.error("[ptyManager] Malformed display marker JSON:", err);
-    }
-
-    // Continue processing after the closing null byte
-    input = input.slice(endIdx + 1);
-  }
-}
-
 function processOutput(session: PtySession, data: string): string {
-  return extractDisplayMarkers(session, data);
+  const { output, buffer, events } = parseDisplayChunk(session.displayBuffer, data);
+  session.displayBuffer = buffer;
+  for (const ev of events) session.onDisplayEvent?.(ev);
+  return output;
 }
 
 function copyUserUploads(userId: string, tmpDir: string) {
@@ -154,15 +111,26 @@ export function startPtySession(
 ) {
   clearSession(userId);
 
+  // Capacity guard: a normal class is well under this. Prevents a single runaway
+  // or abusive client from spawning unbounded interpreters on the shared machine.
+  if (sessions.size >= MAX_CONCURRENT_SESSIONS) {
+    onOutput("\r\n[Server busy — too many programs running. Please try again in a moment.]\r\n");
+    onExit(1);
+    return;
+  }
+
   const tmpDir = path.join(os.tmpdir(), `pylearn_${userId}_${Date.now()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
   copyUserUploads(userId, tmpDir);
 
+  // Filenames come straight off the WebSocket message — sanitize so a crafted
+  // "../../x" can't write outside the per-run temp dir or be executed.
   for (const f of files) {
-    fs.writeFileSync(path.join(tmpDir, f.filename), f.content, "utf8");
+    const safeName = safeScriptFilename(f.filename);
+    fs.writeFileSync(path.join(tmpDir, safeName), f.content, "utf8");
   }
-  const tmpFile = path.join(tmpDir, activeFilename);
+  const tmpFile = path.join(tmpDir, safeScriptFilename(activeFilename));
 
   const modulesDir = path.join(__dirname, "..", "python-modules");
   const existingPythonPath = process.env.PYTHONPATH || "";
@@ -190,36 +158,58 @@ export function startPtySession(
     clearSession(userId);
   }, IDLE_TIMEOUT_MS);
 
+  // Absolute ceiling: kills the run after MAX_WALL_MS regardless of activity.
+  const hardTimer = setTimeout(() => {
+    onOutput("\r\n[Program stopped — it ran longer than the time limit.]\r\n");
+    clearSession(userId);
+  }, MAX_WALL_MS);
+
   const session: PtySession = {
     process: shell,
     tmpFile,
     tmpDir,
     idleTimer,
+    hardTimer,
     onOutput,
     onExit,
     onDisplayEvent,
     displayBuffer: "",
+    bytesSent: 0,
+    stopped: false,
   };
   sessions.set(userId, session);
 
   shell.onData((data) => {
+    // Once stopped (or output-capped) ignore any buffered tail.
+    if (session.stopped) return;
     resetIdleTimer(userId);
     const filtered = processOutput(session, data);
-    if (filtered) {
-      onOutput(filtered);
+    if (!filtered) return;
+
+    session.bytesSent += filtered.length;
+    if (session.bytesSent > MAX_OUTPUT_BYTES) {
+      onOutput("\r\n[Output limit reached — program stopped. Try printing less.]\r\n");
+      session.stopped = true;          // suppress the duplicate exit from onExit below
+      clearSession(userId);
+      onExit(-1);
+      return;
     }
+    onOutput(filtered);
   });
 
   shell.onExit(({ exitCode }) => {
     // Discard any incomplete display buffer at exit
     session.displayBuffer = "";
     clearTimeout(session.idleTimer);
+    clearTimeout(session.hardTimer);
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch (err) {
       console.error(`[ptyManager] Failed to clean up tmp dir on exit for user ${userId}:`, err);
     }
     sessions.delete(userId);
+    // If the run was explicitly stopped/capped, the exit event was already sent.
+    if (session.stopped) return;
     onExit(exitCode ?? 0);
   });
 }
@@ -233,6 +223,10 @@ export function sendPtyInput(userId: string, data: string): boolean {
 }
 
 export function stopPtySession(userId: string) {
+  // Mark stopped first so the process's async onExit doesn't emit a second
+  // pty-exit after the caller sends its own "[Stopped]" (-1) event.
+  const session = sessions.get(userId);
+  if (session) session.stopped = true;
   clearSession(userId);
 }
 

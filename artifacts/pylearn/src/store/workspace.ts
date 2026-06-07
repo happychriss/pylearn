@@ -31,6 +31,7 @@ interface WorkspaceState {
   setOpenFiles: (files: ProjectFile[]) => void;
   updateUnsavedContent: (id: number, content: string) => void;
   clearUnsavedContent: (id: number) => void;
+  clearAllUnsaved: () => void;
   updateOpenFileContent: (id: number, content: string) => void;
   toggleAiChat: () => void;
 }
@@ -56,6 +57,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       saveUnsaved(next);
       return { unsavedChanges: next };
     }),
+  // Wipe all unsaved edits + their localStorage copy. Called on logout and when
+  // leaving the teacher monitor view so one user's draft code can't linger on a
+  // shared device or bleed into the next session.
+  clearAllUnsaved: () => {
+    saveUnsaved({});
+    set({ unsavedChanges: {} });
+  },
   updateOpenFileContent: (id, content) =>
     set((state) => ({
       openFiles: state.openFiles.map(f => f.id === id ? { ...f, content } : f),

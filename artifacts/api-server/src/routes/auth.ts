@@ -22,6 +22,7 @@ import {
   ISSUER_URL,
   type SessionData,
 } from "../lib/auth";
+import { getSafeReturnTo } from "../lib/safety";
 
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 const IS_LOCAL_AUTH = process.env.LOCAL_AUTH === "true";
@@ -64,13 +65,6 @@ function setOidcCookie(res: Response, name: string, value: string) {
     path: "/",
     maxAge: OIDC_COOKIE_TTL,
   });
-}
-
-function getSafeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
 }
 
 async function upsertUser(claims: Record<string, unknown>) {
@@ -284,6 +278,12 @@ const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 
 function checkRateLimit(key: string): boolean {
   const now = Date.now();
+  // Opportunistically prune stale entries so the map can't grow unbounded.
+  if (loginAttempts.size > 500) {
+    for (const [k, v] of loginAttempts) {
+      if (now - v.lastAttempt > LOGIN_WINDOW_MS) loginAttempts.delete(k);
+    }
+  }
   const entry = loginAttempts.get(key);
   if (!entry || now - entry.lastAttempt > LOGIN_WINDOW_MS) {
     loginAttempts.set(key, { count: 1, lastAttempt: now });

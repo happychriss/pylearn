@@ -1,14 +1,24 @@
 import { Router, type IRouter } from "express";
 import { jsonrepair } from "jsonrepair";
-import { eq } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { db, filesTable, aiConfigTable, usersTable, studentAccountsTable } from "@workspace/db";
 import { AiChatBody, AcceptSuggestionBody, AcceptSuggestionResponse } from "@workspace/api-zod";
 import { getOpenAiClient } from "@workspace/integrations-openai-ai-server";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { PYLEARN_LIBRARY_REFERENCE } from "../lib/pylearn-ref";
+import { applyChanges, type RawChange } from "../lib/suggestion-apply";
 
 const router: IRouter = Router();
+
+// Model IDs are centralized so they are easy to review/update in one place when a
+// provider rotates or deprecates a snapshot (a hardcoded, deprecated id silently
+// 500s mid-lesson). Keep these current.
+const MODELS = {
+  openai: "gpt-4o",
+  anthropic: "claude-sonnet-4-6",
+  gemini: "gemini-2.0-flash",
+} as const;
 
 async function getAiConfig() {
   let [config] = await db.select().from(aiConfigTable);
@@ -80,12 +90,6 @@ Import rules:
 13. Emit at most ONE suggestion block per response.
 14. For explanations with no code change, omit the block entirely.`;
 
-// What the AI returns
-interface RawChange {
-  old_text: string;
-  new_text: string;
-}
-
 interface RawSuggestionPayload {
   explanation: string;
   changes?: RawChange[];   // preferred format
@@ -98,96 +102,6 @@ interface SuggestionPayload {
   file: string;
   newContent: string;
   explanation: string;
-}
-
-/** Try to locate oldText in content using progressively looser matching.
- *  Returns the index and matched length, or null. */
-function findMatch(content: string, oldText: string): { index: number; length: number } | null {
-  // 1. Exact match
-  const exact = content.indexOf(oldText);
-  if (exact !== -1) {
-    const second = content.indexOf(oldText, exact + 1);
-    if (second !== -1) return null; // ambiguous
-    return { index: exact, length: oldText.length };
-  }
-
-  // 2. Normalised match: collapse runs of whitespace on each line, case-insensitive
-  const normalise = (s: string) =>
-    s.split('\n').map(l => l.trim().replace(/\s+/g, ' ').toLowerCase()).join('\n');
-
-  const normContent = normalise(content);
-  const normOld = normalise(oldText);
-  const normIdx = normContent.indexOf(normOld);
-  if (normIdx === -1) return null;
-
-  // Map normalised index back to original content
-  // Walk both strings together to find the real start/end positions
-  let ci = 0; // original content index
-  let ni = 0; // normalised content index
-  let realStart = -1;
-  let realEnd = -1;
-
-  while (ci < content.length && ni <= normContent.length) {
-    if (ni === normIdx) realStart = ci;
-    if (ni === normIdx + normOld.length) { realEnd = ci; break; }
-    // Advance one char in both (normalise() maps 1:1 for non-whitespace,
-    // but collapses whitespace runs — advance original past any whitespace run)
-    if (content[ci] === '\n') { ci++; ni++; }
-    else if (/\s/.test(content[ci])) {
-      // skip whitespace run in original; normalised already has single space or nothing
-      while (ci < content.length && /\s/.test(content[ci]) && content[ci] !== '\n') ci++;
-      if (ni < normContent.length && normContent[ni] === ' ') ni++;
-    } else { ci++; ni++; }
-  }
-
-  if (realStart === -1 || realEnd === -1) return null;
-
-  // Ambiguity check on the real slice
-  const realSlice = content.slice(realStart, realEnd);
-  const second = content.indexOf(realSlice, realStart + 1);
-  if (second !== -1 && second !== realStart) return null;
-
-  return { index: realStart, length: realEnd - realStart };
-}
-
-/** Returns true when old and new differ only in leading/trailing whitespace per line
- *  (i.e. an indentation-only fix — no actual code was changed). */
-function isIndentOnly(oldText: string, newText: string): boolean {
-  const ol = oldText.split('\n');
-  const nl = newText.split('\n');
-  return ol.length === nl.length && ol.every((l, i) => l.trim() === nl[i].trim());
-}
-
-/** Apply a list of old_text → new_text changes to fileContent.
- *  Each old_text must match exactly once — unless it is an indentation-only fix that
- *  appears multiple times, in which case all occurrences are patched at once. */
-function applyChanges(
-  fileContent: string,
-  changes: RawChange[],
-): { ok: true; result: string } | { ok: false; error: string } {
-  let content = fileContent.replace(/\r\n/g, '\n');
-
-  for (const change of changes) {
-    const oldText = change.old_text.replace(/\r\n/g, '\n');
-    const newText = change.new_text.replace(/\r\n/g, '\n');
-
-    const match = findMatch(content, oldText);
-    if (!match) {
-      // Fallback: indentation-only fix that appears multiple times → patch all occurrences.
-      // The AI correctly identifies the bad-indented line but can't provide a unique anchor
-      // when the same line repeats (e.g. " t.penup()" appears 5× in one function block).
-      if (isIndentOnly(oldText, newText) && content.includes(oldText)) {
-        content = content.split(oldText).join(newText);
-        continue;
-      }
-      const preview = oldText.split('\n')[0].trim().slice(0, 60);
-      return { ok: false, error: `Could not find: "${preview}"` };
-    }
-
-    content = content.slice(0, match.index) + newText + content.slice(match.index + match.length);
-  }
-
-  return { ok: true, result: content };
 }
 
 /** Repair common AI-generated JSON problems using the jsonrepair library.
@@ -301,20 +215,22 @@ async function streamFromProvider(
   config: { provider: string; apiKey: string | null; mode: string },
   systemPrompt: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-  res: import("express").Response
+  res: import("express").Response,
+  shouldStop: () => boolean = () => false
 ): Promise<string> {
   let fullContent = "";
 
   if (config.provider === "openai") {
     const client = getOpenAiClient(config.apiKey);
     const stream = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: MODELS.openai,
       max_completion_tokens: 8192,
       messages,
       stream: true,
     });
 
     for await (const chunk of stream) {
+      if (shouldStop()) break;
       const content = chunk.choices[0]?.delta?.content;
       if (content) {
         fullContent += content;
@@ -335,13 +251,14 @@ async function streamFromProvider(
       .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-20250514",
+      model: MODELS.anthropic,
       max_tokens: 8192,
       system: systemPrompt,
       messages: nonSystemMessages,
     });
 
     for await (const event of stream) {
+      if (shouldStop()) break;
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         const content = event.delta.text;
         fullContent += content;
@@ -365,12 +282,13 @@ async function streamFromProvider(
       }));
 
     const response = await genAI.models.generateContentStream({
-      model: "gemini-2.0-flash",
+      model: MODELS.gemini,
       config: { systemInstruction: systemPrompt },
       contents: nonSystemMessages,
     });
 
     for await (const chunk of response) {
+      if (shouldStop()) break;
       const text = chunk.text;
       if (text) {
         fullContent += text;
@@ -401,23 +319,46 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  // Credit check — all modes, students only
+  // Fail fast if the provider key is missing — BEFORE charging a credit, so a
+  // misconfiguration never costs the student a credit for a non-answer.
+  if (config.provider !== "openai" && !resolveApiKey(config)) {
+    res.status(503).json({ error: "AI is not configured correctly. Please tell your teacher." });
+    return;
+  }
+
+  // Credit check + decrement — students only, atomic so concurrent requests can't
+  // both read the same balance and double-spend (or grant a free turn).
+  let chargedAccountId: string | null = null;
   {
     const [currentUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
     if (currentUser?.role === "student") {
-      const [account] = await db.select().from(studentAccountsTable).where(eq(studentAccountsTable.id, req.user.id));
-      if (account && account.aiCredits <= 0) {
+      const decremented = await db
+        .update(studentAccountsTable)
+        .set({ aiCredits: sql`${studentAccountsTable.aiCredits} - 1` })
+        .where(and(eq(studentAccountsTable.id, req.user.id), gt(studentAccountsTable.aiCredits, 0)))
+        .returning({ id: studentAccountsTable.id });
+      if (decremented.length === 0) {
         res.status(403).json({ error: "No credits remaining. Contact your teacher for more credits." });
         return;
       }
-      if (account) {
-        await db
-          .update(studentAccountsTable)
-          .set({ aiCredits: account.aiCredits - 1 })
-          .where(eq(studentAccountsTable.id, req.user.id));
-      }
+      chargedAccountId = req.user.id;
     }
   }
+
+  // Refund the credit if the request fails before producing any answer.
+  const refundCredit = async () => {
+    if (!chargedAccountId) return;
+    const id = chargedAccountId;
+    chargedAccountId = null;
+    try {
+      await db
+        .update(studentAccountsTable)
+        .set({ aiCredits: sql`${studentAccountsTable.aiCredits} + 1` })
+        .where(eq(studentAccountsTable.id, id));
+    } catch (e) {
+      console.error("[ai] credit refund failed:", e);
+    }
+  };
 
   let systemPrompt: string;
   if (config.mode === "chat") {
@@ -471,12 +412,19 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
+  // Stop pulling from the provider if the student closes the tab mid-answer —
+  // otherwise we keep consuming (and paying for) tokens with nowhere to send them.
+  let clientGone = false;
+  req.on("close", () => { clientGone = true; });
+  const shouldStop = () => clientGone || res.writableEnded;
+
   try {
     const fullContent = await streamFromProvider(
       { provider: config.provider, apiKey: config.apiKey, mode: config.mode },
       systemPrompt,
       messages,
-      res
+      res,
+      shouldStop
     );
 
     // Suggestion extraction only applies to agent mode.
@@ -495,10 +443,14 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
     res.end();
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    res.write(`data: ${JSON.stringify({ type: "text", content: `Error: ${message}` })}\n\n`);
-    res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-    res.end();
+    // The student got no usable answer — give the credit back.
+    await refundCredit();
+    if (!res.writableEnded) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      res.write(`data: ${JSON.stringify({ type: "text", content: `Error: ${message}` })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+      res.end();
+    }
   }
 });
 

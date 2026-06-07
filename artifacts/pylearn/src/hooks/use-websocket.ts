@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSessionType } from '@/lib/session-type';
+import { getSessionType, onSessionTypeChange } from '@/lib/session-type';
 
 // Session type getter for WebSocket URL
 let _sessionTypeGetter: (() => string) = getSessionType;
@@ -31,6 +31,22 @@ const HEARTBEAT_INTERVAL_MS = 15_000;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
 
 const connections = new Map<string, Connection>();
+
+// When the session identity changes (admin <-> student — e.g. a teacher opening
+// the demo workspace), an already-open socket is still authenticated as the OLD
+// identity. Drop it so it reconnects under the new sessionType. Deferred to a
+// macrotask because setSessionType is called from component render bodies, and we
+// must not mutate socket state during React's render phase.
+onSessionTypeChange(() => {
+  setTimeout(() => {
+    connections.forEach((conn) => {
+      conn.reconnectDelay = MIN_RECONNECT_MS;
+      if (conn.ws && (conn.ws.readyState === WebSocket.OPEN || conn.ws.readyState === WebSocket.CONNECTING)) {
+        try { conn.ws.close(); } catch { /* onclose → scheduleReconnect re-opens with new type */ }
+      }
+    });
+  }, 0);
+});
 
 function getConn(path: string): Connection {
   if (!connections.has(path)) {

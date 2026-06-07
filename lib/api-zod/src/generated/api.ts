@@ -211,19 +211,6 @@ export const GetStudentWorkspaceResponse = zod.array(
 );
 
 /**
- * @summary Execute Python code server-side (fallback)
- */
-export const ExecutePythonBody = zod.object({
-  code: zod.string(),
-});
-
-export const ExecutePythonResponse = zod.object({
-  stdout: zod.string(),
-  stderr: zod.string(),
-  exitCode: zod.number(),
-});
-
-/**
  * @summary Send a message to AI assistant
  */
 export const AiChatBody = zod.object({

@@ -161,38 +161,26 @@ function ImageRenderer({ data }: RendererProps & { mime?: string }) {
 // -- HTML Renderer --
 
 function HtmlRenderer({ data }: RendererProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  useEffect(() => {
-    if (!iframeRef.current) return;
-    const doc = iframeRef.current.contentDocument;
-    if (!doc) return;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html><head><style>
-        body { margin: 8px; font-family: system-ui, sans-serif; color: #e2e8f0; background: transparent; font-size: 14px; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #475569; padding: 6px 10px; text-align: left; }
-        th { background: rgba(51,65,85,0.5); font-weight: 600; }
-        tr:nth-child(even) { background: rgba(51,65,85,0.2); }
-      </style></head><body>${data as string}</body></html>
-    `);
-    doc.close();
-  }, [data]);
+  // Student programs can emit text/html display events (by printing the display
+  // marker), and these also render in the teacher's monitor view — so the content
+  // is untrusted. Use srcDoc with an empty sandbox: opaque origin + scripts
+  // disabled (no allow-same-origin, no allow-scripts), the safest combination.
+  // Trade-off: we can't measure cross-origin content height, so use a fixed,
+  // scrollable box instead of auto-resize.
+  const srcDoc = `<!DOCTYPE html>
+    <html><head><style>
+      body { margin: 8px; font-family: system-ui, sans-serif; color: #e2e8f0; background: transparent; font-size: 14px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #475569; padding: 6px 10px; text-align: left; }
+      th { background: rgba(51,65,85,0.5); font-weight: 600; }
+      tr:nth-child(even) { background: rgba(51,65,85,0.2); }
+    </style></head><body>${data as string}</body></html>`;
 
   return (
     <iframe
-      ref={iframeRef}
-      sandbox="allow-same-origin"
-      className="w-full min-h-[120px] bg-transparent border-0 rounded"
-      style={{ height: 'auto' }}
-      onLoad={() => {
-        if (iframeRef.current?.contentDocument?.body) {
-          const h = iframeRef.current.contentDocument.body.scrollHeight;
-          iframeRef.current.style.height = `${Math.min(h + 20, 500)}px`;
-        }
-      }}
+      sandbox=""
+      srcDoc={srcDoc}
+      className="w-full h-[300px] bg-transparent border-0 rounded"
     />
   );
 }

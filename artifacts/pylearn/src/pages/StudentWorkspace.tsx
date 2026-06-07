@@ -17,6 +17,7 @@ import { Play, Square, Save, Maximize2, Minimize2, ChevronDown, ChevronUp, Hand,
 import type { editor as MonacoEditor } from 'monaco-editor';
 import { usePtySession } from '@/hooks/use-pty-session';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useThrottledCallback } from '@/hooks/use-throttled-callback';
 import { useDisplayEvents } from '@/hooks/use-display-events';
 import { toast } from '@/hooks/use-toast';
 import { APP_VERSION } from '@/lib/version';
@@ -50,6 +51,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     isAiChatOpen,
     toggleAiChat,
     updateUnsavedContent,
+    clearAllUnsaved,
   } = useWorkspaceStore();
 
   const { isRunning, runCode, sendInput, stopCode, listen } = usePtySession();
@@ -82,6 +84,10 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
   const [aiPanelWidth, setAiPanelWidth] = useState(320);
   const aiResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const { emit, on, onConnect, status: wsStatus } = useWebSocket('/api/ws');
+  // Throttled live-mirror of edits to any teacher viewing this workspace.
+  const emitFileChanged = useThrottledCallback((content: string, filename: string | undefined, fileId: number) => {
+    emit('file-changed', { room: user?.id, content, filename, fileId });
+  }, 120);
   const terminalRef = useRef<XTerm | null>(null);
   const outputPresentRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
@@ -188,6 +194,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
           </p>
           <Button
             onClick={async () => {
+              clearAllUnsaved();
               await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
               window.location.href = '/';
             }}
@@ -203,6 +210,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
 
 
   const handleLogout = async () => {
+    clearAllUnsaved();
     await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
     window.location.href = '/';
   };
@@ -277,7 +285,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     if (activeFileId) {
       updateUnsavedContent(activeFileId, content);
       const filename = files?.find(f => f.id === activeFileId)?.filename;
-      emit('file-changed', { room: user?.id, content, filename, fileId: activeFileId });
+      emitFileChanged(content, filename, activeFileId);
 
       // Autosave: stash latest values in refs so the timeout closure is never stale
       autosaveFileId.current = activeFileId;

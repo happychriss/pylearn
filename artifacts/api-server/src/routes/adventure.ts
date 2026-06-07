@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { getUserUploadDir, UPLOAD_BASE, ALLOWED_EXTENSIONS } from "../lib/adventureStorage";
+import { isUnsafePathSegment } from "../lib/safety";
 
 const storage = multer.diskStorage({
   destination: (req: Request, _file, cb) => {
@@ -84,6 +85,10 @@ router.get("/adventure/images", async (req, res) => {
     }
     userId = queryUserId;
   }
+  if (isUnsafePathSegment(userId)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
   const dir = getUserUploadDir(userId);
   try {
     const files = fs.readdirSync(dir).filter((f) => {
@@ -127,6 +132,10 @@ router.get("/adventure/uploads/:userId/:filename", async (req, res) => {
   }
   const requestingUserId = req.user!.id;
   const { userId, filename } = req.params;
+  if (isUnsafePathSegment(userId)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
   if (requestingUserId !== userId) {
     const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, requestingUserId));
     if (!dbUser || dbUser.role !== "admin") {

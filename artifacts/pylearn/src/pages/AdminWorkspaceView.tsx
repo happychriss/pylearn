@@ -12,6 +12,7 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users, FileCode, MessageSquare, Code, Monitor, ChevronDown, ChevronUp, Terminal as TerminalIcon } from 'lucide-react';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useThrottledCallback } from '@/hooks/use-throttled-callback';
 import { useDisplayEvents } from '@/hooks/use-display-events';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -37,7 +38,7 @@ export default function AdminWorkspaceView() {
 
   const {
     setOpenFiles, activeFileId, setActiveFile, unsavedChanges, updateUnsavedContent,
-    isAiChatOpen, toggleAiChat
+    isAiChatOpen, toggleAiChat, clearAllUnsaved
   } = useWorkspaceStore();
   const [coEdit, setCoEdit] = useState(false);
   // Console starts hidden in visual mode so the output renders clean — same as the student view.
@@ -51,6 +52,15 @@ export default function AdminWorkspaceView() {
 
   // Output is always visible side-by-side (no tab) — suppress the "new event" badge permanently.
   useEffect(() => { setDisplayActiveTab('output'); }, [setDisplayActiveTab]);
+
+  // On leaving the monitor view, drop the student's mirrored content so it doesn't
+  // persist in the teacher's localStorage / bleed into the next view.
+  useEffect(() => () => clearAllUnsaved(), [clearAllUnsaved]);
+
+  // Throttled co-edit broadcast to the student (avoid full-file send per keystroke).
+  const emitCoEdit = useThrottledCallback((content: string, filename: string | undefined, fileId: number) => {
+    emit('co-edit-delta', { room: studentId, content, filename, fileId });
+  }, 120);
 
   useEffect(() => {
     if (files) setOpenFiles(files);
@@ -96,7 +106,7 @@ export default function AdminWorkspaceView() {
     if (coEdit && activeFileId) {
       updateUnsavedContent(activeFileId, content);
       const filename = files?.find(f => f.id === activeFileId)?.filename;
-      emit('co-edit-delta', { room: studentId, content, filename, fileId: activeFileId });
+      emitCoEdit(content, filename, activeFileId);
     }
   };
 

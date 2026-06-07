@@ -1,6 +1,7 @@
 import { createServer } from "http";
 import app from "./app";
 import { setupWebSocket } from "./lib/websocket";
+import { cleanupExpiredSessions } from "./lib/auth";
 
 // Fail fast if critical environment variables are missing.
 // Google OAuth credentials are only required when not in local-auth dev mode.
@@ -35,3 +36,8 @@ setupWebSocket(server);
 server.listen(port, () => {
   console.log(`Server listening on port ${port}`);
 });
+
+// Periodically purge expired sessions (hourly). Best-effort; errors are logged.
+setInterval(() => {
+  cleanupExpiredSessions().catch((e) => console.error("[sessions] cleanup failed:", e));
+}, 60 * 60 * 1000).unref();

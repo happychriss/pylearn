@@ -2,7 +2,7 @@ import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://accounts.google.com";
@@ -69,6 +69,13 @@ export async function updateSession(
 
 export async function deleteSession(sid: string): Promise<void> {
   await db.delete(sessionsTable).where(eq(sessionsTable.sid, sid));
+}
+
+/** Delete all sessions whose expiry has passed. Run periodically so the table
+ *  doesn't accumulate dead rows (expired sessions are only otherwise removed
+ *  lazily, on the next access of that exact sid). */
+export async function cleanupExpiredSessions(): Promise<void> {
+  await db.delete(sessionsTable).where(lt(sessionsTable.expire, new Date()));
 }
 
 export async function clearSession(

@@ -221,16 +221,16 @@ if (!files.length) return;
         activeFilename,
         (data) => {
           broadcastToUser(userId, { type: "pty-output", data });
-          broadcastToAdmins({ type: "pty-output", userId, data }, userId);
+          broadcastToAdminsViewing(userId, { type: "pty-output", userId, data });
         },
         (exitCode) => {
           broadcastToUser(userId, { type: "pty-exit", exitCode });
-          broadcastToAdmins({ type: "pty-exit", userId, exitCode }, userId);
+          broadcastToAdminsViewing(userId, { type: "pty-exit", userId, exitCode });
         },
         (displayMsg: DisplayMessage) => {
           const payload = { type: "display-event", userId, event: displayMsg };
           broadcastToUser(userId, payload);
-          broadcastToAdmins(payload, userId);
+          broadcastToAdminsViewing(userId, payload);
         }
       );
       break;
@@ -256,6 +256,26 @@ function broadcastToAdmins(msg: Record<string, unknown>, excludeUserId?: string)
     if (client.role === "admin" && client.ws.readyState === WebSocket.OPEN
         && client.userId !== excludeUserId) {
       client.ws.send(JSON.stringify(msg));
+    }
+  });
+}
+
+/**
+ * Send high-volume per-student events (terminal output, display events, exit)
+ * ONLY to admins currently viewing that student's workspace — i.e. who joined
+ * the room via "admin-join-workspace". Without this, every admin socket received
+ * every student's output firehose even when not watching them.
+ */
+function broadcastToAdminsViewing(studentId: string, msg: Record<string, unknown>) {
+  const payload = JSON.stringify(msg);
+  clients.forEach((client) => {
+    if (
+      client.role === "admin" &&
+      client.room === studentId &&
+      client.userId !== studentId &&
+      client.ws.readyState === WebSocket.OPEN
+    ) {
+      client.ws.send(payload);
     }
   });
 }

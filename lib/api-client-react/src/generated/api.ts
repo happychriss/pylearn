@@ -34,8 +34,6 @@ import type {
   DeletePromptTemplate200,
   DeleteStudentAccount200,
   ErrorEnvelope,
-  ExecutePythonBody,
-  ExecutionResult,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
   HelpRequest,
@@ -1346,92 +1344,6 @@ export function useGetStudentWorkspace<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
-
-/**
- * @summary Execute Python code server-side (fallback)
- */
-export const getExecutePythonUrl = () => {
-  return `/api/execute`;
-};
-
-export const executePython = async (
-  executePythonBody: ExecutePythonBody,
-  options?: RequestInit,
-): Promise<ExecutionResult> => {
-  return customFetch<ExecutionResult>(getExecutePythonUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(executePythonBody),
-  });
-};
-
-export const getExecutePythonMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof executePython>>,
-    TError,
-    { data: BodyType<ExecutePythonBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof executePython>>,
-  TError,
-  { data: BodyType<ExecutePythonBody> },
-  TContext
-> => {
-  const mutationKey = ["executePython"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof executePython>>,
-    { data: BodyType<ExecutePythonBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return executePython(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type ExecutePythonMutationResult = NonNullable<
-  Awaited<ReturnType<typeof executePython>>
->;
-export type ExecutePythonMutationBody = BodyType<ExecutePythonBody>;
-export type ExecutePythonMutationError = ErrorType<unknown>;
-
-/**
- * @summary Execute Python code server-side (fallback)
- */
-export const useExecutePython = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof executePython>>,
-    TError,
-    { data: BodyType<ExecutePythonBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof executePython>>,
-  TError,
-  { data: BodyType<ExecutePythonBody> },
-  TContext
-> => {
-  return useMutation(getExecutePythonMutationOptions(options));
-};
 
 /**
  * @summary Send a message to AI assistant

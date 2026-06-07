@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import path from "path";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -38,5 +38,14 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(staticDir, "index.html"));
   });
 }
+
+// Central error handler — Express 5 forwards async route rejections here. Without
+// it an unhandled error in a route leaks a stack trace / hangs the request.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("[unhandled]", err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Internal server error" });
+});
 
 export default app;
