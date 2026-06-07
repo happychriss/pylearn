@@ -36,7 +36,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
   const [, setLocation] = useLocation();
   const { data: profile, refetch: refetchProfile } = useGetMyProfile({ query: { enabled: isAuthenticated } });
   const { data: files } = useListFiles({}, { query: { enabled: isAuthenticated, refetchInterval: 5000 } });
-  const { data: aiConfig } = useGetStudentAiConfig({ query: { enabled: isAuthenticated, refetchInterval: 10000 } });
+  const { data: aiConfig, refetch: refetchAiConfig } = useGetStudentAiConfig({ query: { enabled: isAuthenticated, refetchInterval: 10000 } });
   const { data: activeSheets = [], refetch: refetchSheets } = useListActiveCheatSheets({ query: { enabled: isAuthenticated, refetchInterval: 60000, staleTime: 0, refetchIntervalInBackground: true } });
   const updateFile = useUpdateFile();
   const helpReq = useCreateHelpRequest();
@@ -72,7 +72,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
 
   const [teacherViewing, setTeacherViewing] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
-  const [modeChangedWhileActive, setModeChangedWhileActive] = useState(false);
+  const [pendingModeChange, setPendingModeChange] = useState<string | null>(null);
   const [sessionTerminatedReason, setSessionTerminatedReason] = useState<string | null>(null);
   // showConsole only matters when isVisualMode — starts hidden so output is clean on first display event
   const [showConsole, setShowConsole] = useState(false);
@@ -149,7 +149,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
         updateUnsavedContent(targetFileId, msg.content as string);
       }
     });
-    const off5 = on('ai-mode-changed', () => setModeChangedWhileActive(true));
+    const off5 = on('ai-mode-changed', (msg: Record<string, unknown>) => setPendingModeChange((msg.mode as string) || 'updated'));
     const off6 = on('cheatsheet-updated', () => refetchSheets());
     const off7 = on('session-terminated', (msg: Record<string, unknown>) => {
       setSessionTerminatedReason((msg.reason as string) || 'kicked');
@@ -201,30 +201,6 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
     );
   }
 
-  if (modeChangedWhileActive) {
-    return (
-      <div className="h-dvh w-full flex items-center justify-center bg-background px-4">
-        <div className="p-8 rounded-2xl bg-card border shadow-lg text-center max-w-sm w-full">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <MessageSquare className="w-7 h-7 text-primary" />
-          </div>
-          <h2 className="text-xl font-bold mb-2">{t('workspace.mode_changed_title')}</h2>
-          <p className="text-muted-foreground mb-6">
-            {t('workspace.mode_changed_desc')}
-          </p>
-          <Button
-            onClick={async () => {
-              await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
-              window.location.href = '/';
-            }}
-            className="w-full rounded-xl"
-          >
-            <LogOut className="w-4 h-4 mr-2" /> {t('common.logout')}
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   const handleLogout = async () => {
     await fetch('/api/auth/student-logout', { method: 'POST', credentials: 'include' });
@@ -454,7 +430,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
               <WifiOff size={14} className="text-red-400 animate-pulse" title="Connecting…" />
             )}
           </div>
-          {aiConfig?.mode && (
+          {aiConfig?.mode && aiConfig.mode !== 'off' && (
             <div className="px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
               {aiConfig.mode === 'chat' ? t('workspace.mode_chat') : aiConfig.mode === 'agent' ? t('workspace.mode_agent') : t('workspace.mode_suggest')}
             </div>
@@ -662,6 +638,35 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
           </>
         )}
       </div>
+
+      {/* AI mode change notification overlay */}
+      {pendingModeChange && (() => {
+        const modeLabel =
+          pendingModeChange === 'chat' ? t('workspace.mode_chat') :
+          pendingModeChange === 'agent' ? t('workspace.mode_agent') :
+          pendingModeChange === 'suggestion' ? t('workspace.mode_suggest') :
+          pendingModeChange === 'off' ? t('workspace.mode_off') :
+          pendingModeChange;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="p-8 rounded-2xl bg-card border shadow-lg text-center max-w-sm w-full">
+              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-7 h-7 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">{t('workspace.mode_changed_title')}</h2>
+              <p className="text-muted-foreground mb-6">
+                {t('workspace.mode_changed_desc', { mode: modeLabel })}
+              </p>
+              <Button
+                onClick={() => { setPendingModeChange(null); refetchAiConfig(); }}
+                className="w-full rounded-xl"
+              >
+                {t('common.confirm')}
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

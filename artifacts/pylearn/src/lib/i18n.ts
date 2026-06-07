@@ -180,9 +180,9 @@ const translations = {
       session_ended_desc:
         'Your teacher has ended your session. Please speak to your teacher.',
       back_to_login: 'Back to login',
-      mode_changed_title: 'Classroom mode changed',
+      mode_changed_title: 'AI mode changed',
       mode_changed_desc:
-        'Your teacher has updated the classroom settings. Please log out and sign back in to continue.',
+        'Your teacher switched the AI mode to {{mode}}. Click OK to continue working.',
       output_label: 'Output',
       running: '\u25cf Running',
       hide_console: 'Hide console',
@@ -195,6 +195,7 @@ const translations = {
       mode_chat: 'Chat Mode',
       mode_agent: 'Agent Mode',
       mode_suggest: 'Suggest Mode',
+      mode_off: 'AI Off',
       teacher_viewing: 'Teacher is viewing',
       need_help: 'Need Help',
       source_code: 'Source Code',
@@ -453,9 +454,9 @@ const translations = {
       session_ended_desc:
         'Dein Lehrer hat deine Sitzung beendet. Bitte sprich mit deinem Lehrer.',
       back_to_login: 'Zur\u00fcck zur Anmeldung',
-      mode_changed_title: 'Unterrichtsmodus ge\u00e4ndert',
+      mode_changed_title: 'KI-Modus ge\u00e4ndert',
       mode_changed_desc:
-        'Dein Lehrer hat die Unterrichtseinstellungen aktualisiert. Bitte melde dich ab und erneut an.',
+        'Dein Lehrer hat den KI-Modus auf {{mode}} umgestellt. Klicke auf OK um weiterzuarbeiten.',
       output_label: 'Ausgabe',
       running: '\u25cf L\u00e4uft',
       hide_console: 'Konsole ausblenden',
@@ -468,6 +469,7 @@ const translations = {
       mode_chat: 'Chat-Modus',
       mode_agent: 'Agenten-Modus',
       mode_suggest: 'Vorschlags-Modus',
+      mode_off: 'KI deaktiviert',
       teacher_viewing: 'Lehrer schaut zu',
       need_help: 'Hilfe ben\u00f6tigt',
       source_code: 'Quellcode',
