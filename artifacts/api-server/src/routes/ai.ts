@@ -53,47 +53,42 @@ const SUGGESTION_INSTRUCTION = `
 ---
 ## Code Change Format (system — do not modify)
 
-When suggesting code changes, end your response with exactly this block:
+When suggesting a code change, end your response with exactly this block:
 
 ---SUGGESTION---
 {
   "explanation": "brief explanation of what changed",
-  "changes": [
-    { "old_text": "exact lines from the file", "new_text": "replacement lines" }
-  ]
+  "new_content": "the COMPLETE updated program from the first line to the last"
 }
 ---END_SUGGESTION---
 
-CRITICAL JSON rules — the block is machine-parsed. Any violation breaks the apply button for the student:
-1. The content between ---SUGGESTION--- and ---END_SUGGESTION--- must be valid JSON. No exceptions.
-2. No comments inside the JSON — not // and not /* */. Comments are not valid JSON.
-3. No trailing commas after the last item in an array or object.
-4. All strings must be properly quoted with double quotes. Escape internal double quotes as \\".
-   Example — Python code containing a quote:
-   Python line:  print("Hello")
-   In JSON:      "old_text": "print(\"Hello\")"
-5. Newlines inside string values must be written as \\n, not literal line breaks.
-
 Content rules:
-6. old_text must be copied EXACTLY from the current file — same indentation, spacing, and comments.
-   IMPORTANT: Copy old_text verbatim, including any bugs or syntax errors in the original. Do NOT fix or improve old_text — it must match the broken code character-for-character so the system can locate it.
-7. old_text must be unique in the file. Include more surrounding lines if needed to make it unambiguous.
-8. new_text is the full replacement for old_text. To insert a line, include the anchor line in both old_text and new_text.
-9. Use multiple objects in the changes array for edits in separate locations (e.g. a new import AND a new statement).
-Import rules:
-10. Before suggesting any pylearn function, check the current file's imports. If the required import is missing, add it as the FIRST change in the changes array.
-    - For pylearn functions used with the module prefix (e.g. pylearn.show): add \`import pylearn\` if not present.
-    - For adventure functions called directly (scene, say, ask, show_sprite, move_sprite, show_text, clear_text): add the specific names to a \`from pylearn import ...\` line. If that line already exists, extend it rather than adding a duplicate.
-    - For \`time.sleep\` or any other stdlib module: add the import if missing.
-11. Do NOT show modified code in a \`\`\`python block — the suggestion block is the only place for code.
-12. Do NOT wrap the suggestion block in triple backticks. Use the literal ---SUGGESTION--- and ---END_SUGGESTION--- markers exactly as shown.
-13. Emit at most ONE suggestion block per response.
-14. For explanations with no code change, omit the block entirely.`;
+1. new_content is the ENTIRE file after your change — every line of the program, not just the parts you touched. The student's editor is replaced with exactly this text, so anything you leave out is deleted.
+2. Change ONLY what the student asked for. Keep every other line byte-for-byte identical to the current file — same code, comments, blank lines, and indentation.
+3. If you use a pylearn function that the file does not import yet, add the import in new_content:
+   - For functions used with the module prefix (e.g. pylearn.show): add \`import pylearn\` at the top if not present.
+   - For adventure functions called directly (scene, say, ask, show_sprite, move_sprite, show_text, clear_text): add the names to a \`from pylearn import ...\` line — extend the existing line if there is one instead of adding a duplicate.
+   - For \`time.sleep\` or any other stdlib module: add the import if missing.
+
+CRITICAL JSON rules — the block is machine-parsed. Any violation breaks the apply button for the student:
+4. The content between ---SUGGESTION--- and ---END_SUGGESTION--- must be valid JSON. No exceptions.
+5. No comments inside the JSON — not // and not /* */. Comments are not valid JSON.
+6. No trailing commas after the last item in an object.
+7. All strings must use double quotes. Escape internal double quotes as \\".
+   Example — Python line  print("Hello")  becomes in JSON  "print(\"Hello\")".
+8. Newlines inside new_content must be written as \\n, not literal line breaks.
+
+Output rules:
+9. Do NOT show the modified code in a \`\`\`python block as well — the suggestion block is the only place for code.
+10. Do NOT wrap the suggestion block in triple backticks. Use the literal ---SUGGESTION--- and ---END_SUGGESTION--- markers exactly as shown.
+11. Emit at most ONE suggestion block per response.
+12. For explanations with no code change, omit the block entirely.`;
 
 interface RawSuggestionPayload {
   explanation: string;
-  changes?: RawChange[];   // preferred format
-  newContent?: string;     // full-file fallback (still accepted)
+  new_content?: string;    // preferred format: the complete updated file
+  newContent?: string;     // camelCase alias the AI sometimes emits
+  changes?: RawChange[];   // legacy find/replace format — kept as a safety net
   file?: string;
 }
 
@@ -122,7 +117,21 @@ function extractSuggestion(
     const raw = JSON.parse(repairJson(jsonStr)) as RawSuggestionPayload;
     if (!raw.explanation) return null;
 
-    // Preferred: changes array
+    // Preferred: the AI returns the complete updated file. No anchor matching, so this
+    // can never fail with "could not find" / ambiguous-line errors.
+    const fullFile = raw.new_content ?? raw.newContent;
+    if (typeof fullFile === "string" && fullFile.trim().length > 0) {
+      return {
+        suggestion: {
+          file: raw.file ?? filename,
+          newContent: fullFile,
+          explanation: raw.explanation,
+        },
+        cleanText,
+      };
+    }
+
+    // Safety net: legacy find/replace format, in case the model emits the old shape.
     if (Array.isArray(raw.changes) && raw.changes.length > 0) {
       const result = applyChanges(fileContext, raw.changes);
       if (!result.ok) return { error: result.error, cleanText };
@@ -130,18 +139,6 @@ function extractSuggestion(
         suggestion: {
           file: raw.file ?? filename,
           newContent: result.result,
-          explanation: raw.explanation,
-        },
-        cleanText,
-      };
-    }
-
-    // Fallback: full-file newContent
-    if (raw.newContent) {
-      return {
-        suggestion: {
-          file: raw.file ?? filename,
-          newContent: raw.newContent,
           explanation: raw.explanation,
         },
         cleanText,

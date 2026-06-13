@@ -5,7 +5,8 @@ import { DiffView } from '../ui/diff-view';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Send, Bot, User, Sparkles, Copy, Check } from 'lucide-react';
-import { useAcceptSuggestion, useRejectSuggestion } from '@workspace/api-client-react';
+import { useAcceptSuggestion, useRejectSuggestion, getListFilesQueryKey, type ProjectFile } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -40,6 +41,7 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const acceptSuggestion = useAcceptSuggestion();
   const rejectSuggestion = useRejectSuggestion();
+  const queryClient = useQueryClient();
 
   const activeFile = openFiles.find(f => f.id === activeFileId);
   const currentCode = activeFileId ? (unsavedChanges[activeFileId] ?? activeFile?.content ?? '') : '';
@@ -70,9 +72,16 @@ export function AiPanel({ credits, onCreditUsed }: AiPanelProps) {
       } },
       {
         onSuccess: (updatedFile) => {
-          // File is already saved in DB by the accept API call — sync local state
+          // File is already saved in DB by the accept API call — sync local state.
           updateOpenFileContent(activeFileId, updatedFile.content);
           clearUnsavedContent(activeFileId);
+          // The Run button builds its file list from the useListFiles query cache
+          // (`unsavedChanges[id] ?? file.content`). That cache only refetches every 5s,
+          // so without this write a Run fired right after Accept would execute the OLD
+          // code. Patch the cache immediately to close the race.
+          queryClient.setQueryData<ProjectFile[]>(getListFilesQueryKey({}), (old) =>
+            old?.map(f => f.id === activeFileId ? { ...f, content: updatedFile.content } : f)
+          );
           removeSuggestion(messageId);
         },
       }

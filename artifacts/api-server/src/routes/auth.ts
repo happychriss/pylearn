@@ -8,7 +8,7 @@ import {
   LogoutMobileSessionResponse,
   StudentLoginBody,
 } from "@workspace/api-zod";
-import { db, usersTable, studentAccountsTable, filesTable } from "@workspace/db";
+import { db, usersTable, studentAccountsTable, filesTable, programTemplatesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   clearSession,
@@ -67,6 +67,31 @@ function setOidcCookie(res: Response, name: string, value: string) {
   });
 }
 
+// Default program seeded into the admin Programs menu and given to new
+// students on first login. Created on teacher login if it doesn't exist yet.
+const DEFAULT_PROGRAM_FILENAME = "hello_world.py";
+const DEFAULT_PROGRAM_CONTENT = 'print("Welcome")\n';
+
+// Ensure the default `hello_world.py` program template exists. Called when a
+// teacher/admin logs in: if the program is already available, do nothing;
+// otherwise create it so every new student has a default program to receive.
+async function ensureDefaultProgram(adminId: string) {
+  const [existing] = await db
+    .select()
+    .from(programTemplatesTable)
+    .where(eq(programTemplatesTable.filename, DEFAULT_PROGRAM_FILENAME));
+  if (existing) return;
+
+  await db.insert(programTemplatesTable).values({
+    filename: DEFAULT_PROGRAM_FILENAME,
+    content: DEFAULT_PROGRAM_CONTENT,
+    createdByAdminId: adminId,
+  });
+  console.log(
+    `[auth] Default program "${DEFAULT_PROGRAM_FILENAME}" was missing — created it.`,
+  );
+}
+
 async function upsertUser(claims: Record<string, unknown>) {
   const userData = {
     id: claims.sub as string,
@@ -78,7 +103,7 @@ async function upsertUser(claims: Record<string, unknown>) {
       | null,
   };
 
-  const [user] = await db
+  let [user] = await db
     .insert(usersTable)
     .values(userData)
     .onConflictDoUpdate({
@@ -104,8 +129,14 @@ async function upsertUser(claims: Record<string, unknown>) {
         .set({ role: "admin", updatedAt: new Date() })
         .where(eq(usersTable.id, user.id))
         .returning();
-      return promoted;
+      user = promoted;
     }
+  }
+
+  // A teacher/admin just logged in — make sure the default student program is
+  // available in the Programs menu.
+  if (user.role === "admin") {
+    await ensureDefaultProgram(user.id);
   }
 
   return user;
@@ -297,40 +328,6 @@ function checkRateLimit(key: string): boolean {
   return true;
 }
 
-const STARTER_FILE_CONTENT = `# My Python Adventure
-# Welcome to PyLearn! Try running this code.
-from pylearn import scene, say, ask
-
-scene("The Enchanted Forest")
-say("You stand at a crossroads in a dark forest.")
-say("To the left, you hear strange sounds.")
-say("To the right, you see a faint light.")
-
-name = ask("What is your name, brave adventurer?")
-say(f"Hello, {name}! Your journey begins now.")
-
-choice = ask("Do you go left or right?")
-
-if choice.lower() == "left":
-    scene("The Music Clearing")
-    say(f"{name} bravely walks toward the sounds...")
-    say("You discover a friendly dragon playing music!")
-    say("The dragon teaches you a song. You win!")
-elif choice.lower() == "right":
-    scene("The Hidden Cave")
-    say(f"{name} follows the light...")
-    say("You find a treasure chest full of golden coins!")
-    say("You're rich! You win!")
-else:
-    scene("The Owl's Path")
-    say(f"{name} stands still, unsure what to do...")
-    say("A friendly owl lands on your shoulder.")
-    say("It guides you to a hidden village. You win!")
-
-scene("THE END")
-print("Try editing this code to make your own adventure!")
-`;
-
 router.post("/auth/student-login", async (req: Request, res: Response) => {
   const parsed = StudentLoginBody.safeParse(req.body);
   if (!parsed.success) {
@@ -411,10 +408,17 @@ router.post("/auth/student-login", async (req: Request, res: Response) => {
     .where(eq(filesTable.userId, user.id));
 
   if (existingFiles.length === 0) {
+    // Seed the new student from the default program. The teacher login flow
+    // guarantees it exists, but fall back to the built-in content just in case.
+    const [defaultProgram] = await db
+      .select()
+      .from(programTemplatesTable)
+      .where(eq(programTemplatesTable.filename, DEFAULT_PROGRAM_FILENAME));
+
     await db.insert(filesTable).values({
       userId: user.id,
-      filename: "my_adventure.py",
-      content: STARTER_FILE_CONTENT,
+      filename: DEFAULT_PROGRAM_FILENAME,
+      content: defaultProgram?.content ?? DEFAULT_PROGRAM_CONTENT,
     });
   }
 

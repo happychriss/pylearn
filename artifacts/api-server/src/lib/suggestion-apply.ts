@@ -8,15 +8,34 @@ export interface RawChange {
   new_text: string;
 }
 
-/** Try to locate oldText in content using progressively looser matching.
- *  Returns the index and matched length, or null. */
-export function findMatch(content: string, oldText: string): { index: number; length: number } | null {
+/** Outcome of locating an anchor in the file. "ambiguous" carries the occurrence
+ *  count so callers can tell the user the anchor was found but not unique — a very
+ *  different (and fixable) problem from a missing anchor. */
+export type MatchResult =
+  | { kind: "found"; index: number; length: number }
+  | { kind: "ambiguous"; count: number }
+  | { kind: "missing" };
+
+/** Count non-overlapping occurrences of needle in haystack (needle assumed non-empty). */
+function countOccurrences(haystack: string, needle: string): number {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const i = haystack.indexOf(needle, from);
+    if (i === -1) return count;
+    count++;
+    from = i + needle.length;
+  }
+}
+
+/** Try to locate oldText in content using progressively looser matching. */
+export function findMatch(content: string, oldText: string): MatchResult {
   // 1. Exact match
   const exact = content.indexOf(oldText);
   if (exact !== -1) {
-    const second = content.indexOf(oldText, exact + 1);
-    if (second !== -1) return null; // ambiguous
-    return { index: exact, length: oldText.length };
+    const count = countOccurrences(content, oldText);
+    if (count > 1) return { kind: "ambiguous", count };
+    return { kind: "found", index: exact, length: oldText.length };
   }
 
   // 2. Normalised match: collapse runs of whitespace on each line, case-insensitive
@@ -26,7 +45,10 @@ export function findMatch(content: string, oldText: string): { index: number; le
   const normContent = normalise(content);
   const normOld = normalise(oldText);
   const normIdx = normContent.indexOf(normOld);
-  if (normIdx === -1) return null;
+  if (normIdx === -1) return { kind: "missing" };
+  if (countOccurrences(normContent, normOld) > 1) {
+    return { kind: "ambiguous", count: countOccurrences(normContent, normOld) };
+  }
 
   // Map normalised index back to original content
   // Walk both strings together to find the real start/end positions
@@ -48,14 +70,14 @@ export function findMatch(content: string, oldText: string): { index: number; le
     } else { ci++; ni++; }
   }
 
-  if (realStart === -1 || realEnd === -1) return null;
+  if (realStart === -1 || realEnd === -1) return { kind: "missing" };
 
   // Ambiguity check on the real slice
   const realSlice = content.slice(realStart, realEnd);
-  const second = content.indexOf(realSlice, realStart + 1);
-  if (second !== -1 && second !== realStart) return null;
+  const sliceCount = countOccurrences(content, realSlice);
+  if (sliceCount > 1) return { kind: "ambiguous", count: sliceCount };
 
-  return { index: realStart, length: realEnd - realStart };
+  return { kind: "found", index: realStart, length: realEnd - realStart };
 }
 
 /** Returns true when old and new differ only in leading/trailing whitespace per line
@@ -80,15 +102,25 @@ export function applyChanges(
     const newText = change.new_text.replace(/\r\n/g, '\n');
 
     const match = findMatch(content, oldText);
-    if (!match) {
+    if (match.kind !== "found") {
       // Fallback: indentation-only fix that appears multiple times → patch all occurrences.
       // The AI correctly identifies the bad-indented line but can't provide a unique anchor
       // when the same line repeats (e.g. " t.penup()" appears 5× in one function block).
+      // Safe to apply everywhere because the change is whitespace-only.
       if (isIndentOnly(oldText, newText) && content.includes(oldText)) {
         content = content.split(oldText).join(newText);
         continue;
       }
       const preview = oldText.split('\n')[0].trim().slice(0, 60);
+      if (match.kind === "ambiguous") {
+        // The anchor IS in the file but appears more than once, so we can't tell which
+        // occurrence to change. Report it truthfully (not "could not find") so the user
+        // can re-ask with more surrounding lines.
+        return {
+          ok: false,
+          error: `Anchor "${preview}" appears ${match.count} times — needs more surrounding lines to identify which one to change`,
+        };
+      }
       return { ok: false, error: `Could not find: "${preview}"` };
     }
 
