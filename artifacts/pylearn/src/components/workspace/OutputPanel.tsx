@@ -29,9 +29,13 @@ function PlotlyRenderer({ data }: RendererProps) {
       plotData.data ?? [],
       {
         ...(plotData.layout ?? {}),
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'rgba(30,41,59,0.5)',
-        font: { color: '#e2e8f0' },
+        // The chart sits on a white card (see render wrapper), so use a light theme:
+        // dark text on white keeps the title, legend, and axis labels readable. A dark
+        // theme here made the legend/title near-white on white — i.e. "all light grey".
+        paper_bgcolor: 'white',
+        plot_bgcolor: 'white',
+        font: { color: '#0f172a' },
+        legend: { font: { color: '#0f172a' }, ...(plotData.layout?.legend ?? {}) },
         margin: { t: 40, r: 20, b: 40, l: 50 },
       },
       { responsive: true, displayModeBar: false }

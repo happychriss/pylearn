@@ -26,28 +26,55 @@ import pylearn
 
 ---
 
-## Charts — Plotly
+## Available libraries (IMPORTANT)
+
+Student code runs in a sandbox. The ONLY things you may import are:
+
+- **\`pylearn\`** — the library documented here (Turtle, Figure/charts, scenes, sprites, text).
+- **The Python standard library** — e.g. \`math\`, \`random\`, \`time\`, \`datetime\`, \`statistics\`, \`itertools\`, \`json\`, \`re\`, \`string\`.
+
+NO third-party packages are installed. \`numpy\`, \`pandas\`, \`matplotlib\`, \`plotly\`, \`requests\`, \`scipy\` and the like all raise \`ModuleNotFoundError\` — never import them. To draw or plot, use \`pylearn\` (\`Figure\` for charts, \`Turtle\` for drawing) and compute values with the \`math\` module in normal Python loops (e.g. \`math.sin(x)\`), not numpy arrays.
+
+---
+
+## Charts — pylearn.Figure (PREFERRED)
+
+Build a chart with \`pylearn.Figure\`, add series with \`.line()\` / \`.points()\` / \`.bar()\`, then \`pylearn.show(fig)\`. No third-party package — compute the x/y values with plain Python and the \`math\` module:
 
 \`\`\`python
-# show() detects the object type automatically (duck-typing)
-import plotly.express as px
-fig = px.bar(x=["A","B","C"], y=[1,3,2])
-pylearn.show(fig)           # Plotly figure  → interactive chart
-pylearn.show(df)            # Pandas DataFrame → HTML table
-pylearn.show("<b>hi</b>")   # String          → HTML
+import pylearn, math
 
-# display() sends raw Plotly JSON directly (no plotly install needed)
+xs = [i / 10 for i in range(0, 63)]      # 0 .. ~6.2
+
+fig = pylearn.Figure(title="Sine and Cosine")
+fig.line(xs, [math.sin(x) for x in xs], name="sin(x)")
+fig.line(xs, [math.cos(x) for x in xs], name="cos(x)")
+pylearn.show(fig)
+\`\`\`
+
+Figure methods:
+- \`Figure(title="", height=300)\` — create a chart.
+- \`.line(x, y, name=None)\` — a connected curve.
+- \`.points(x, y, name=None)\` — separate dots (scatter).
+- \`.bar(x, y, name=None)\` — bars.
+- \`x\` and \`y\` are plain Python lists of equal length. Call the add-methods multiple times to overlay series on one chart.
+
+### Advanced: raw Plotly JSON via display()
+
+For trace types Figure doesn't wrap (pie, histogram, box, …) send raw Plotly JSON — still no third-party package:
+
+\`\`\`python
 pylearn.display({
     "data": [
-        {"type": "bar",     "x": [...], "y": [...]},
-        {"type": "scatter", "x": [...], "y": [...], "mode": "lines+markers"},
-        {"type": "pie",     "labels": [...], "values": [...]},
+        {"type": "pie",       "labels": ["A", "B"], "values": [3, 5]},
+        {"type": "histogram", "x": [1, 1, 2, 3, 3, 3]},
     ],
     "layout": {"title": "My Chart", "height": 300}
 }, mime="application/vnd.plotly+json")
 \`\`\`
+Supported types: bar, scatter, pie, histogram, box, and all standard Plotly types.
 
-Supported Plotly trace types via raw JSON: bar, scatter, pie, histogram, box, and all standard Plotly types.
+You can also pass an HTML string to \`pylearn.show("<b>hi</b>")\` for simple formatted output.
 
 ---
 

@@ -78,6 +78,60 @@ def display_image(filepath):
 
 
 # ---------------------------------------------------------------------------
+# Figure — simple chart builder (rendered via Plotly, no third-party packages)
+# ---------------------------------------------------------------------------
+
+class Figure:
+    """Build a chart with simple methods, then display it with pylearn.show(fig).
+
+    Compute the x/y values with plain Python (and the `math` module) — no numpy,
+    pandas, matplotlib or plotly needed. show() detects the .to_plotly_json()
+    method on this object and renders it as an interactive chart.
+
+    Usage:
+        import pylearn, math
+        xs = [i / 10 for i in range(0, 63)]
+        fig = pylearn.Figure(title="Sine and Cosine")
+        fig.line(xs, [math.sin(x) for x in xs], name="sin(x)")
+        fig.line(xs, [math.cos(x) for x in xs], name="cos(x)")
+        pylearn.show(fig)
+    """
+
+    def __init__(self, title="", height=300):
+        self._title = title
+        self._height = height
+        self._traces = []
+
+    def _add(self, trace_type, x, y, name, mode=None):
+        trace = {"type": trace_type, "x": list(x), "y": list(y)}
+        if mode is not None:
+            trace["mode"] = mode
+        if name is not None:
+            trace["name"] = name
+        self._traces.append(trace)
+        return self  # allow chaining: fig.line(...).line(...)
+
+    def line(self, x, y, name=None):
+        """Add a connected-line series (a curve)."""
+        return self._add("scatter", x, y, name, mode="lines")
+
+    def points(self, x, y, name=None):
+        """Add a series of separate dots (scatter)."""
+        return self._add("scatter", x, y, name, mode="markers")
+
+    def bar(self, x, y, name=None):
+        """Add a bar series."""
+        return self._add("bar", x, y, name)
+
+    def to_plotly_json(self):
+        """Duck-typing hook used by pylearn.show() — returns a Plotly figure dict."""
+        return {
+            "data": self._traces,
+            "layout": {"title": self._title, "height": self._height},
+        }
+
+
+# ---------------------------------------------------------------------------
 # Turtle graphics
 # ---------------------------------------------------------------------------
 

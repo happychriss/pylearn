@@ -438,11 +438,6 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
               <WifiOff size={14} className="text-red-400 animate-pulse" title="Connecting…" />
             )}
           </div>
-          {aiConfig?.mode && aiConfig.mode !== 'off' && (
-            <div className="px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
-              {aiConfig.mode === 'chat' ? t('workspace.mode_chat') : aiConfig.mode === 'agent' ? t('workspace.mode_agent') : t('workspace.mode_suggest')}
-            </div>
-          )}
           {teacherViewing && (
             <div className="px-3 py-1 rounded-full bg-accent/20 text-accent-foreground text-xs font-bold flex items-center gap-2 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-accent" />
@@ -639,7 +634,7 @@ export default function StudentWorkspace({ isTeacherDemo }: { isTeacherDemo?: bo
                   onMouseDown={handleAiPanelResizeStart}
                 />
                 <div style={{ width: aiPanelWidth }} className="overflow-hidden rounded-xl shadow-sm">
-                  <AiPanel credits={aiCredits ?? 0} onCreditUsed={() => refetchProfile()} />
+                  <AiPanel credits={aiCredits ?? 0} mode={aiConfig?.mode} onCreditUsed={() => refetchProfile()} />
                 </div>
               </div>
             )}
